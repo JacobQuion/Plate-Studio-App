@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), var(--font-inter), ui-sans-serif, sans-serif;
+  /* Accent: the indigo gradient runs brand-700 → brand-500. */
+  --color-brand-100: #e0e3fc;
+  --color-brand-200: #c3c8f8;
+  --color-brand-300: #9aa2f1;
+  --color-brand-400: #6f79ea;
+  --color-brand-500: #4752e3;
+  --color-brand-600: #3944c9;
+  --color-brand-700: #2b36b0;
+  --color-brand-800: #232c8f;
+  --color-brand-900: #1b2270;
+  --animate-kenburns: kenburns 14s ease-in-out infinite alternate;
+  --animate-scan-x: scan-x 2.4s ease-in-out infinite;
+
+  @keyframes kenburns {
+    from { transform: scale(1.02) translateY(0); }
+    to { transform: scale(1.18) translateY(-2%); }
+  }
+  @keyframes scan-x {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(500%); }
+  }
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: #07070b;
+  color: #f4f4f5;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * While the ad is being edited (assistant working or video rendering) the page root
+ * gets data-editing and the accents slowly rotate through the brand shades:
+ *   .accent-fill  a rotating gradient fades in over the fill (needs a positioned element)
+ *   .accent-ring  a glow rotates around the element's edge (needs a positioned element)
+ *   .accent-text  text is painted with a rotating gradient; icons use the
+ *                 #accent-flow SVG gradient in page.tsx, which rotates at the same pace
+ * The animations are always declared but paused, so switching editing on and off
+ * fades them in and out and picks the rotation up where it left off.
+ */
+@property --accent-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes accent-rotate {
+  to { --accent-angle: 360deg; }
+}
+.accent-fill {
+  isolation: isolate;
+}
+.accent-fill::after,
+.accent-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+  animation: accent-rotate 5s linear infinite paused;
+}
+.accent-fill::after {
+  z-index: -1;
+  background: linear-gradient(var(--accent-angle), var(--color-brand-800), var(--color-brand-600) 45%, var(--color-brand-400));
+}
+.accent-ring::before {
+  z-index: 1;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--accent-angle),
+    var(--color-brand-300),
+    var(--color-brand-500) 25%,
+    var(--color-brand-700) 50%,
+    var(--color-brand-500) 75%,
+    var(--color-brand-300)
+  );
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+:not(svg).accent-text {
+  background-image: linear-gradient(var(--accent-angle), var(--color-brand-500), var(--color-brand-300));
+  -webkit-background-clip: text;
+  background-clip: text;
+  transition: color 0.8s ease;
+  animation: accent-rotate 5s linear infinite paused;
+}
+[data-editing] .accent-fill::after,
+[data-editing] .accent-ring::before {
+  opacity: 1;
+  animation-play-state: running;
+}
+[data-editing] :not(svg).accent-text {
+  color: transparent;
+  animation-play-state: running;
+}
+[data-editing] svg.accent-text {
+  stroke: url(#accent-flow);
+}
+@media (prefers-reduced-motion: reduce) {
+  .accent-fill::after,
+  .accent-ring::before,
+  :not(svg).accent-text {
+    animation: none;
+  }
+  [data-editing] svg.accent-text {
+    stroke: currentColor;
+  }
+}
+
+::selection {
+  background: rgb(57 68 201 / 0.45);
+}
