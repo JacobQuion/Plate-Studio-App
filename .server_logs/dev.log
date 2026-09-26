@@ -1,0 +1,749 @@
+
+> plate-studio@0.1.0 dev
+> next dev
+
+▲ Next.js 16.3.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://10.43.94.98:3000
+- Environments: .env.local
+✓ Ready in 197ms
+✓ Running next.config.ts took 12ms
+
+ GET / 200 in 175ms (next.js: 92ms, application-code: 83ms)
+ GET /api/status 200 in 35ms (next.js: 29ms, application-code: 6ms)
+ GET / 200 in 30ms (next.js: 3ms, application-code: 27ms)
+ GET / 200 in 34ms (next.js: 7ms, application-code: 27ms)
+ GET / 200 in 26ms (next.js: 1.7ms, application-code: 25ms)
+ POST /api/assistant 200 in 14.3s (next.js: 29ms, application-code: 14.3s)
+[motion] hero shot for scene dish-muhsljrp1l9j failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. ",
+    "status": "RESOURCE_EXHAUSTED",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.Help",
+        "links": [
+          {
+            "description": "Learn more about Gemini API quotas",
+            "url": "https://ai.google.dev/gemini-api/docs/rate-limits"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] bite shot for scene dish-muhsljrp01ww failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. ",
+    "status": "RESOURCE_EXHAUSTED",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.Help",
+        "links": [
+          {
+            "description": "Learn more about Gemini API quotas",
+            "url": "https://ai.google.dev/gemini-api/docs/rate-limits"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] fire shot for scene dish-muhsljrp1l9j failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. ",
+    "status": "RESOURCE_EXHAUSTED",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.Help",
+        "links": [
+          {
+            "description": "Learn more about Gemini API quotas",
+            "url": "https://ai.google.dev/gemini-api/docs/rate-limits"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] plating shot for scene dish-muhsljrp1l9j failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. ",
+    "status": "RESOURCE_EXHAUSTED",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.Help",
+        "links": [
+          {
+            "description": "Learn more about Gemini API quotas",
+            "url": "https://ai.google.dev/gemini-api/docs/rate-limits"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] bite shot for scene dish-muhsljrp1l9j failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. ",
+    "status": "RESOURCE_EXHAUSTED",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.Help",
+        "links": [
+          {
+            "description": "Learn more about Gemini API quotas",
+            "url": "https://ai.google.dev/gemini-api/docs/rate-limits"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] fire shot for scene dish-muhsloux314o failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. ",
+    "status": "RESOURCE_EXHAUSTED",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.Help",
+        "links": [
+          {
+            "description": "Learn more about Gemini API quotas",
+            "url": "https://ai.google.dev/gemini-api/docs/rate-limits"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] plating shot for scene dish-muhsloux314o failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. ",
+    "status": "RESOURCE_EXHAUSTED",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.Help",
+        "links": [
+          {
+            "description": "Learn more about Gemini API quotas",
+            "url": "https://ai.google.dev/gemini-api/docs/rate-limits"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] bite shot for scene dish-muhsloux314o failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. ",
+    "status": "RESOURCE_EXHAUSTED",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.Help",
+        "links": [
+          {
+            "description": "Learn more about Gemini API quotas",
+            "url": "https://ai.google.dev/gemini-api/docs/rate-limits"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] cheers shot for scene outro failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. ",
+    "status": "RESOURCE_EXHAUSTED",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.Help",
+        "links": [
+          {
+            "description": "Learn more about Gemini API quotas",
+            "url": "https://ai.google.dev/gemini-api/docs/rate-limits"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+ POST /api/generate 200 in 59s (next.js: 26ms, application-code: 59s)
+ GET /api/video/4621e2ad-3c11-42a5-8700-2d82d7b97710 206 in 498ms (next.js: 458ms, application-code: 39ms)
+ GET /api/video/4621e2ad-3c11-42a5-8700-2d82d7b97710 206 in 11.3s (next.js: 6ms, application-code: 11.3s)
+ GET /api/video/4621e2ad-3c11-42a5-8700-2d82d7b97710 206 in 19.0s (next.js: 7ms, application-code: 19.0s)
+ GET / 200 in 27ms (next.js: 5ms, application-code: 21ms)
+ GET / 200 in 9ms (next.js: 1.2ms, application-code: 8ms)
+✓ Compiled in 21ms
+ POST /api/scrape-menu 200 in 3.2s (next.js: 17ms, application-code: 3.1s)
+ GET / 200 in 45ms (next.js: 5ms, application-code: 40ms)
+[assistant] failed: Error: Gemini request failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at geminiGenerate (lib/assistant.ts:425:11)
+    at async runGemini (lib/assistant.ts:457:22)
+    at async runAssistant (lib/assistant.ts:547:15)
+    at async POST (app/api/assistant/route.ts:39:20)
+  423 |     const text = await res.text();
+  424 |     if (res.status === 401 || res.status === 403 || /API_KEY_INVALID/.test(text)) throw new GeminiAuthError(text);
+> 425 |     throw new Error(`Gemini request failed (${res.status}): ${text.slice(0, 500)}`);
+      |           ^
+  426 |   }
+  427 |   return (await res.json()) as {
+  428 |     candidates?: { content?: { parts?: GeminiPart[] }; finishReason?: string }[];
+ POST /api/assistant 502 in 11.2s (next.js: 6ms, application-code: 11.2s)
+ GET / 200 in 16ms (next.js: 1.3ms, application-code: 15ms)
+ GET / 200 in 8ms (next.js: 2ms, application-code: 6ms)
+[assistant] failed: Error: Gemini request failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at geminiGenerate (lib/assistant.ts:425:11)
+    at async runGemini (lib/assistant.ts:457:22)
+    at async runAssistant (lib/assistant.ts:547:15)
+    at async POST (app/api/assistant/route.ts:39:20)
+  423 |     const text = await res.text();
+  424 |     if (res.status === 401 || res.status === 403 || /API_KEY_INVALID/.test(text)) throw new GeminiAuthError(text);
+> 425 |     throw new Error(`Gemini request failed (${res.status}): ${text.slice(0, 500)}`);
+      |           ^
+  426 |   }
+  427 |   return (await res.json()) as {
+  428 |     candidates?: { content?: { parts?: GeminiPart[] }; finishReason?: string }[];
+ POST /api/assistant 502 in 11.1s (next.js: 1.6ms, application-code: 11.1s)
+ GET / 200 in 8ms (next.js: 1.2ms, application-code: 7ms)
+ GET / 200 in 17ms (next.js: 8ms, application-code: 9ms)
+[assistant] Gemini quota exhausted; using the basic assistant
+ POST /api/assistant 200 in 3.3s (next.js: 1.6ms, application-code: 3.3s)
+[assistant] Gemini quota exhausted; using the basic assistant
+ POST /api/assistant 200 in 170ms (next.js: 1.0ms, application-code: 169ms)
+[assistant] Gemini quota exhausted; using the basic assistant
+ POST /api/assistant 200 in 346ms (next.js: 0.9ms, application-code: 345ms)
+[assistant] Gemini quota exhausted; using the basic assistant
+ POST /api/assistant 200 in 119ms (next.js: 0.8ms, application-code: 118ms)
+ GET / 200 in 23ms (next.js: 1.7ms, application-code: 21ms)
+ GET / 200 in 30ms (next.js: 3ms, application-code: 27ms)
+[assistant] Gemini quota exhausted; using the basic assistant
+ POST /api/assistant 200 in 259ms (next.js: 2ms, application-code: 257ms)
+[motion] kitchen shot for scene intro failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] fire shot for scene dish-muhtg7b4ajyh failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] plating shot for scene dish-muhtg7b4ajyh failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] hero shot for scene dish-muhtg7b4ajyh failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] bite shot for scene dish-muhtg7b4ajyh failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] hero shot for scene dish-muhtg7b4cvxx failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] hero shot for scene dish-muhtg7b4b354 failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] fire shot for scene dish-muhtg7b4b354 failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] plating shot for scene dish-muhtg7b4b354 failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] bite shot for scene dish-muhtg7b4b354 failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] fire shot for scene dish-muhtg7b4cvxx failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] plating shot for scene dish-muhtg7b4cvxx failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] bite shot for scene dish-muhtg7b4cvxx failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+[motion] cheers shot for scene outro failed: Error: Veo create failed (429): {
+  "error": {
+    "code": 429,
+    "message": "Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at generateWithGemini (lib/providers/video.ts:150:77)
+    at async generateMotionClip (lib/providers/video.ts:189:55)
+    at async (lib/video-pipeline.ts:185:19)
+    at async worker (lib/video-pipeline.ts:93:20)
+    at async mapLimit (lib/video-pipeline.ts:96:3)
+    at async (lib/video-pipeline.ts:180:5)
+    at async generateAd (lib/video-pipeline.ts:224:27)
+    at async Object.start (app/api/generate/route.ts:38:24)
+  148 |     const text = await create.text();
+  149 |     const retryable = create.status === 429 && /RetryInfo|PerMinute/.test(text);
+> 150 |     if (!retryable || attempt >= 5 || Date.now() > deadline - 60_000) throw new Error(`Veo create failed (${create.status}): ${text}`);
+      |                                                                             ^
+  151 |     await sleep(15_000 * (attempt + 1));
+  152 |   }
+  153 |
+ POST /api/generate 200 in 18.6s (next.js: 7ms, application-code: 18.6s)
+ GET /api/video/cde37a22-ae12-494c-a766-e4847b1548dd 206 in 261ms (next.js: 4ms, application-code: 257ms)
+ GET /api/video/cde37a22-ae12-494c-a766-e4847b1548dd 206 in 14ms (next.js: 5ms, application-code: 10ms)
+ GET /api/video/cde37a22-ae12-494c-a766-e4847b1548dd 206 in 13.2s (next.js: 3ms, application-code: 13.2s)
+ GET / 200 in 14ms (next.js: 1.9ms, application-code: 13ms)
+ GET / 200 in 14ms (next.js: 9ms, application-code: 6ms)
+ GET / 200 in 11ms (next.js: 1.0ms, application-code: 10ms)
+ GET / 200 in 11ms (next.js: 6ms, application-code: 5ms)
+ GET / 200 in 12ms (next.js: 1.0ms, application-code: 11ms)
+ GET / 200 in 12ms (next.js: 6ms, application-code: 6ms)
+ GET / 200 in 12ms (next.js: 1.1ms, application-code: 11ms)
+ GET / 200 in 13ms (next.js: 7ms, application-code: 6ms)
+ GET / 200 in 13ms (next.js: 1.1ms, application-code: 12ms)
+ GET / 200 in 13ms (next.js: 7ms, application-code: 6ms)
+ GET / 200 in 12ms (next.js: 1.1ms, application-code: 11ms)
+ GET / 200 in 6ms (next.js: 1.0ms, application-code: 5ms)
+
+> plate-studio@0.1.0 dev
+> next dev
+
+sh: next: command not found
+
+> plate-studio@0.1.0 dev
+> next dev
+
+▲ Next.js 16.3.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://10.43.94.98:3000
+✓ Ready in 140ms
+✓ Running next.config.ts took 624ms
+
+ GET / 200 in 1210ms (next.js: 1127ms, application-code: 84ms)
+ GET / 200 in 487ms (next.js: 388ms, application-code: 99ms)
+ GET / 200 in 36ms (next.js: 19ms, application-code: 17ms)
+ GET / 200 in 29ms (next.js: 4ms, application-code: 25ms)
+ POST /api/assistant 200 in 309ms (next.js: 202ms, application-code: 107ms)
+ POST /api/generate 200 in 22.1s (next.js: 61ms, application-code: 22.0s)
+ GET /api/video/edbfd937-5371-4273-9bb2-ce2fb45e0bfb 206 in 498ms (next.js: 463ms, application-code: 36ms)
+ GET /api/video/edbfd937-5371-4273-9bb2-ce2fb45e0bfb 206 in 13.8s (next.js: 8ms, application-code: 13.8s)
