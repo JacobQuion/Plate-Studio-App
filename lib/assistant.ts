@@ -131,7 +131,7 @@ export class Workspace {
     if (!dishScenes(this.project).length && added.length) {
       this.project = setAdDishes(this.project, added.slice(0, 3).map((d) => d.id));
     }
-    this.actions.push(`Imported ${added.length} dish${added.length === 1 ? "" : "es"} from ${menu.restaurant}${menu.source === "demo" ? " (sample menu)" : ""}`);
+    this.actions.push(added.length ? `Imported ${added.length} dish${added.length === 1 ? "" : "es"} from ${menu.restaurant}` : menu.note ?? "No dish photos were found. Upload your own photos.");
     return { restaurant: menu.restaurant, source: menu.source, note: menu.note, added: added.map((d) => ({ dish_id: d.id, title: d.title, price: d.price })) };
   }
 
@@ -142,7 +142,7 @@ export class Workspace {
     if (typeof input.cta === "string") (p.cta = input.cta.slice(0, 24)), changed.push("call to action");
     if (typeof input.website === "string") (p.website = input.website.slice(0, 80)), changed.push("website");
     if (typeof input.music === "boolean") (p.music = input.music), changed.push(input.music ? "music on" : "music off");
-    if (typeof input.lifestyle_shots === "boolean") (p.lifestyle = input.lifestyle_shots), changed.push(input.lifestyle_shots ? "cooking & diner shots on" : "cooking & diner shots off");
+    if (typeof input.lifestyle_shots === "boolean") (p.lifestyle = input.lifestyle_shots), changed.push(input.lifestyle_shots ? "dining & service shots on" : "dining & service shots off");
     this.project = p;
     if (changed.length) this.actions.push(`Updated ${changed.join(", ")}`);
     return { ok: true };
@@ -150,7 +150,7 @@ export class Workspace {
 
   setAdDishes(ids: string[]) {
     const valid = ids.filter((id) => this.library.some((d) => d.id === id));
-    if (!valid.length) throw new Error("None of those dish_ids are in the library");
+    if (ids.length && !valid.length) throw new Error("None of those dish_ids are in the library");
     this.project = setAdDishes(this.project, valid);
     this.actions.push(`Ad now features ${valid.length} dish${valid.length === 1 ? "" : "es"}`);
     return { featured: valid.slice(0, MAX_AD_DISHES), ignored: ids.filter((id) => !valid.includes(id)) };
@@ -207,7 +207,7 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
   },
   {
     name: "set_brand",
-    description: "Update brand-wide settings: restaurant name, call-to-action text (end card button + closing voice line), website shown on the end card, background music, and lifestyle_shots (AI-generated shots of each dish being cooked, plated and eaten, plus a kitchen shot in the intro and friends toasting behind the end card; rendered with an AI video key, where each shot is a paid generation, or from free stock footage with a Pexels key).",
+    description: "Update brand-wide settings: restaurant name, call-to-action text, website, background music, and lifestyle_shots (guests eating, a waiter serving food, friends socializing, and cooking shots; uses paid AI video when configured, Pexels footage, or distinct bundled dining images without keys).",
     input_schema: {
       type: "object",
       properties: {
@@ -261,11 +261,6 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
     },
   },
   {
-    name: "render_video",
-    description: "Render the ad. Only call this when the user explicitly asks to render, generate or export the video; renders are slow and can cost money. Rendering starts after your reply.",
-    input_schema: { type: "object", properties: {}, additionalProperties: false },
-  },
-  {
     name: "suggest_replies",
     description: "Offer 2-4 short follow-ups the user might send next, written in the user's voice (e.g. 'Make the pizza scene longer'). Call this once at the end of every turn.",
     input_schema: {
@@ -289,9 +284,6 @@ export async function runTool(ws: Workspace, name: string, input: Record<string,
       return ws.updateDish(input as { dish_id: string });
     case "update_scene":
       return ws.updateScene(input);
-    case "render_video":
-      ws.render = true;
-      return { ok: true, note: "Rendering will start after your reply." };
     case "suggest_replies":
       ws.suggestions = (Array.isArray(input.suggestions) ? input.suggestions : []).map(String).filter(Boolean).slice(0, 4);
       return { ok: true };
@@ -306,7 +298,7 @@ export async function runTool(ws: Workspace, name: string, input: Record<string,
 
 const SYSTEM = `You are the creative director inside Plate Studio, a tool that turns restaurant dish photos into ~30 second 16:9 YouTube ads.
 
-An ad is: an intro (restaurant name over a fast montage, opening in the kitchen), one scene per featured dish (a dramatic cooking shot, plating, the dish itself, then someone taking the first bite, with the dish name and tagline on screen and one narration line), and an end card (restaurant, call-to-action button, website, over friends toasting). The cooking, eating, kitchen and toast shots are AI-generated with a video API key, or real stock footage with a Pexels key; without either, every shot is a camera move over the dish photo. brand.lifestyle_shots turns them on or off. Scene lengths are automatic unless set, and the total aims for 30 seconds. The user sees the video, a timeline and an editor next to this chat, and can also edit anything there directly.
+An ad is: an intro (restaurant name over a waiter serving guests and the kitchen), one scene per featured dish (the dish itself and someone eating, plus cooking and plating when time allows, with the dish name and tagline and one narration line), and an end card (restaurant, call-to-action button and website, over friends socializing and toasting). Each photo or clip appears once per video; no reused dish montage or looping footage. Lifestyle shots use an AI video key, Pexels stock footage, or three distinct bundled AI-generated dining images without keys. brand.lifestyle_shots turns these on or off; when off, the brand cards have plain backgrounds. Duplicate dish photos must be replaced before rendering. Scene lengths are automatic unless set, and the total aims for 30 seconds. The user sees the video, a timeline and an editor next to this chat, and can also edit anything there directly.
 
 Each user message starts with the current project as JSON in <ad_state>. Uploaded photos arrive as images labelled with their dish_id. When the user has picked a section of the timeline, a <selection> lists the scenes in it: apply edits to those scenes only, unless the message clearly asks for something else.
 
@@ -315,7 +307,7 @@ How to work:
 - When photos are uploaded, look at each one and call update_dish with an appetizing name and a one-sentence menu description. Don't invent prices. Then make sure they're featured in the ad.
 - For general feedback ("punchier", "more upscale", "shorter"), rewrite the relevant voice lines, taglines or durations to match. Keep narration natural to read aloud: short sentences, no emoji, no hashtags.
 - Keep the whole ad near 30 seconds unless the user asks otherwise; check estimated_total_seconds. That leaves room for about 3 dishes with one short narration line each (under 12 words); if more dishes are featured, keep their lines even shorter.
-- Only call render_video when the user explicitly asks to render, generate or export the video. Never render on your own, including after importing a link or making a first draft: the user queues the ad up and renders it when ready. After an import, say the ad is ready to review and that they can render it whenever they like.
+- Rendering only starts when the user clicks Render in the UI. Never say a video is being generated or has finished. After edits or an import, tell them to click Render when ready. Export only downloads an already completed render and never starts generation.
 - Reply in one to three short sentences saying what you changed or asking the one question you need answered. The edits already show in the editor, so don't list every field.
 - End every turn by calling suggest_replies with specific next steps for this ad.`;
 
@@ -512,7 +504,7 @@ async function runBasic(ws: Workspace, history: ChatTurn[], attachments: Attachm
   if (attachments.length) {
     const ids = [...dishScenes(ws.project).map((s) => s.dishId!), ...attachments.map((a) => a.dishId)];
     ws.setAdDishes(ids);
-    notes.push(`Added ${attachments.length} photo${attachments.length > 1 ? "s" : ""} to the ad. Name them in the editor below the video.`);
+    notes.push(`Your ${attachments.length} photo${attachments.length > 1 ? "s are" : " is"} ready. Click Render when you're happy with the selected dishes.`);
   }
   const cta = /\b(?:button|cta|call to action)\b[^"“]*["“]([^"”]{2,24})["”]/i.exec(text)?.[1];
   if (cta) {
@@ -521,11 +513,11 @@ async function runBasic(ws: Workspace, history: ChatTurn[], attachments: Attachm
   }
   if (/\bmusic\s+off\b|\bno music\b|\bwithout music\b/i.test(text)) ws.setBrand({ music: false }), notes.push("Music is off.");
   else if (/\bmusic\s+on\b|\badd music\b/i.test(text)) ws.setBrand({ music: true }), notes.push("Music is on.");
-  if (/\b(no|without|remove|drop|turn off)\b[^.]*\b(people|diners|cooking|lifestyle)\b/i.test(text)) ws.setBrand({ lifestyle_shots: false }), notes.push("Cooking and diner shots are off.");
-  else if (/\b(add|with|turn on|show)\b[^.]*\b(people|diners|cooking|lifestyle)\b/i.test(text)) ws.setBrand({ lifestyle_shots: true }), notes.push("Cooking and diner shots are on.");
-  if (/\brender\b|\b(generate|export) (the |my )?(video|ad)\b/i.test(text)) (ws.render = true), notes.push("Rendering now.");
+  if (/\b(no|without|remove|drop|turn off)\b[^.]*\b(people|diners|cooking|lifestyle|eating|socializing|waiter|server|serving)\b/i.test(text)) ws.setBrand({ lifestyle_shots: false }), notes.push("Dining, service and cooking shots are off.");
+  else if (/\b(add|more|with|turn on|show)\b[^.]*\b(people|diners|cooking|lifestyle|eating|socializing|waiter|server|serving)\b/i.test(text)) ws.setBrand({ lifestyle_shots: true }), notes.push("Dining, service and cooking shots are on.");
+  if (/\brender\b|\b(generate|export) (the |my )?(video|ad)\b/i.test(text)) notes.push("Click Render to generate your video. Once it's ready, Export downloads the MP4.");
 
-  ws.suggestions = dishScenes(ws.project).length ? ["Render the ad", "Turn the music off", 'Change the button to "Book a table"'] : ["Try the sample cafe menu", "Upload dish photos"];
+  ws.suggestions = dishScenes(ws.project).length ? ["Render the ad", "Turn the music off", 'Change the button to "Book a table"'] : ["Find a restaurant", "Upload dish photos"];
   if (notes.length) return notes.join(" ");
   return "I can import Yelp or Google Maps links, add photos, change the button text and render. For free-form feedback, add GEMINI_API_KEY or ANTHROPIC_API_KEY to .env.local. You can also edit any scene directly below the video.";
 }

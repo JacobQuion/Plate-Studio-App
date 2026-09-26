@@ -1,0 +1,34 @@
+"use client";
+
+import { Check, History, ImagePlus, MapPin, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import type { Workspace } from "@/lib/workspace";
+import { MAX_AD_DISHES } from "@/lib/ad-plan";
+import { cx } from "./shared";
+
+export function LibraryPanel({ workspace: w, disabled, onSearch, onAddFiles, onToggleDish, onRemoveDish, onRestoreDish, onSelectLocation, onRemoveLocation, onRestoreLocation }: {
+  workspace: Workspace; disabled: boolean; onSearch: () => void; onAddFiles: (files: File[]) => void;
+  onToggleDish: (id: string) => void; onRemoveDish: (id: string) => void; onRestoreDish: (id: string) => void;
+  onSelectLocation: (id: string) => void; onRemoveLocation: (id: string) => void; onRestoreLocation: (id: string) => void;
+}) {
+  const [history, setHistory] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const selected = w.project.scenes.flatMap((s) => s.dishId ? [s.dishId] : []);
+  return <div className="min-h-0 flex-1 overflow-y-auto p-4">
+    <div className="mb-4 flex gap-2"><button onClick={() => setHistory(false)} className={cx("rounded-full px-3 py-2 text-sm", !history ? "bg-white/10 text-white" : "text-zinc-400")}>Active</button><button onClick={() => setHistory(true)} className={cx("flex items-center gap-1.5 rounded-full px-3 py-2 text-sm", history ? "bg-white/10 text-white" : "text-zinc-400")}><History className="size-4" /> History ({w.dishHistory.length + w.locationHistory.length})</button></div>
+    {history ? <>
+      <p className="mb-4 text-sm text-zinc-400">Removed items stay on this device, including uploaded photos. Restore them whenever you need them.</p>
+      {!w.dishHistory.length && !w.locationHistory.length && <p className="py-8 text-center text-sm text-zinc-500">No removed dishes or locations yet.</p>}
+      {w.locationHistory.map(({ location, removedAt }) => <div key={location.id} className="mb-2 flex items-center gap-3 rounded-xl border border-white/10 p-3"><MapPin className="size-4 shrink-0 text-zinc-400" /><div className="min-w-0 flex-1"><p className="truncate text-sm">{location.name}</p><p className="text-xs text-zinc-500">Location · {new Date(removedAt).toLocaleDateString()}</p></div><button disabled={disabled} onClick={() => onRestoreLocation(location.id)} aria-label={`Restore location ${location.name}`} className="p-2 text-brand-300 disabled:opacity-30"><RotateCcw className="size-4" /></button></div>)}
+      {w.dishHistory.map(({ dish, removedAt }) => <div key={dish.id} className="mb-2 flex items-center gap-3 rounded-xl border border-white/10 p-3"><img src={dish.imageUrl || undefined} alt="" className="size-10 rounded-lg bg-white/5 object-cover" /><div className="min-w-0 flex-1"><p className="truncate text-sm">{dish.title || "Untitled dish"}</p><p className="text-xs text-zinc-500">Dish · {new Date(removedAt).toLocaleDateString()}</p></div><button disabled={disabled} onClick={() => onRestoreDish(dish.id)} aria-label={`Restore dish ${dish.title}`} className="p-2 text-brand-300 disabled:opacity-30"><RotateCcw className="size-4" /></button></div>)}
+    </> : <>
+      <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-medium text-zinc-300">Locations</h3><button disabled={disabled} onClick={onSearch} className="flex items-center gap-1 text-xs text-brand-300 disabled:opacity-40"><Search className="size-3.5" /> Search</button></div>
+      {!w.locations.length && <p className="mb-4 text-sm text-zinc-500">Search for a restaurant to add a location.</p>}
+      {w.locations.map((l) => <div key={l.id} className={cx("mb-2 flex items-center gap-2 rounded-xl border p-3", w.activeLocationId === l.id ? "border-brand-600/70 bg-brand-900/20" : "border-white/10")}><button disabled={disabled} onClick={() => onSelectLocation(l.id)} className="min-w-0 flex-1 text-left disabled:opacity-40"><p className="flex items-center gap-1.5 text-sm">{w.activeLocationId === l.id && <Check className="size-3.5 shrink-0 text-brand-300" />}<span className="truncate">{l.name}</span></p><p className="mt-1 truncate text-xs text-zinc-500">{l.address}</p></button><button disabled={disabled} onClick={() => onRemoveLocation(l.id)} aria-label={`Remove location ${l.name}`} title="Remove location and its imported dishes; keep in history" className="rounded-lg p-2 text-zinc-500 hover:bg-white/5 hover:text-rose-300 disabled:opacity-40"><Trash2 className="size-4" /></button></div>)}
+      <div className="mt-6 mb-3 flex items-center justify-between"><h3 className="text-sm font-medium text-zinc-300">Dishes · {selected.length}/{MAX_AD_DISHES} in ad</h3><button disabled={disabled} onClick={() => input.current?.click()} className="flex items-center gap-1 text-xs text-brand-300 disabled:opacity-40"><ImagePlus className="size-3.5" /> Upload</button></div>
+      <input ref={input} type="file" accept="image/*" multiple hidden onChange={(e) => { onAddFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
+      {!w.library.length && <p className="text-sm text-zinc-500">Upload your dish photos to get started.</p>}
+      {w.library.map((d) => <div key={d.id} className="mb-2 flex items-center gap-2 rounded-xl border border-white/10 p-2"><img src={d.imageUrl || undefined} alt="" className="size-12 rounded-lg bg-white/5 object-cover" /><button disabled={disabled || (!selected.includes(d.id) && selected.length >= MAX_AD_DISHES)} onClick={() => onToggleDish(d.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:opacity-40"><span className="min-w-0 flex-1"><span className="block truncate text-sm">{d.title || "Untitled dish"}</span><span className="text-xs text-zinc-500">{selected.includes(d.id) ? "In this ad" : "Click to feature"}</span></span>{selected.includes(d.id) ? <Check className="size-4 shrink-0 text-brand-300" /> : <Plus className="size-4 shrink-0 text-zinc-500" />}</button><button disabled={disabled} onClick={() => onRemoveDish(d.id)} aria-label={`Remove dish ${d.title}`} title="Remove dish; keep in history" className="rounded-lg p-2 text-zinc-500 hover:bg-white/5 hover:text-rose-300 disabled:opacity-40"><Trash2 className="size-4" /></button></div>)}
+    </>}
+  </div>;
+}

@@ -11,17 +11,17 @@ export interface Dish {
 
 export interface MenuImportResult {
   restaurant: string;
-  /** "live" = parsed from the page, "demo" = curated fallback menu. */
-  source: "live" | "demo";
+  /** Only real menu data is imported; missing data never inserts sample dishes. */
+  source: "live" | "unavailable";
   dishes: Dish[];
-  /** Why we fell back to the demo menu, when we did. */
+  /** Why menu photos could not be imported, when unavailable. */
   note?: string;
 }
 
 /** The four stages shown in the render progress bar. */
 export type StageId = "assets" | "motion" | "voice" | "assemble";
 
-/** "fallback" means the stage finished using a local mock instead of the external API. */
+/** "fallback" means the stage finished using a local renderer or alternative provider. */
 export type StageStatus = "active" | "done" | "fallback" | "error";
 
 export interface ProgressEvent {

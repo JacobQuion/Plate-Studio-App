@@ -1,5 +1,6 @@
-import { randomUUID } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
@@ -9,9 +10,10 @@ import { renderMusicBed } from "@/lib/music";
 import { VIDEO_HEIGHT, VIDEO_WIDTH, renderDishOverlays, renderIntroOverlay, renderOutroOverlay, type FrameBoxes } from "@/lib/overlays";
 import { buildMotionPrompt, configuredVideoProvider, generateMotionClip } from "@/lib/providers/video";
 import { fetchStockClip, stockConfigured } from "@/lib/providers/stock";
-import { bitePrompt, cheersPrompt, firePrompt, kitchenPrompt, menuSetting, platingPrompt, stockQueries, type ShotKind, type StockQuery } from "@/lib/shots";
+import { bitePrompt, cheersPrompt, firePrompt, kitchenPrompt, menuSetting, platingPrompt, servingPrompt, socializingPrompt, stockQueries, type ShotKind, type StockQuery } from "@/lib/shots";
 import { generateVoiceover, voiceConfigured } from "@/lib/providers/voice";
-import { fetchBuffer } from "@/lib/safe-fetch";
+import { prepareDishImages } from "@/lib/image-assets";
+import { clipKey, LIFESTYLE_IMAGES, planShots, type Clip, type Shot } from "@/lib/shot-plan";
 import type { ProgressEvent, SceneTiming, StageId, StageStatus, VideoProvider, VoiceProvider } from "@/lib/types";
 
 /**
@@ -25,13 +27,13 @@ import type { ProgressEvent, SceneTiming, StageId, StageStatus, VideoProvider, V
  *              [assemble] render each scene, join with transitions, mix voice + music
  *
  * Structure of the ad:
- *   intro   fast-cut montage (kitchen on fire, then the dishes) under the restaurant name
+ *   intro   a server welcomes guests, then the kitchen, under the restaurant name
  *   dish ×N fire → plating → the dish itself → someone taking a bite, under an
  *           animated lower third (name) and a tagline
- *   outro   end card with the call to action and website, over friends toasting
+ *   outro   end card over friends socializing and toasting
  *
- * Without any video source (or when clips fail) the gaps are filled with camera moves
- * on the dish photo (push-in, pans, close-ups).
+ * Each image or clip appears once. Missing footage uses distinct bundled dining
+ * images; a dish photo gets one continuous camera move, never repeated cuts.
  *
  * What goes on screen and in the voiceover comes from the ad project
  * (lib/ad-plan.ts); scene lengths come from planTimeline() using the real
@@ -52,12 +54,6 @@ export interface AdResult {
 export type ProgressCallback = (event: ProgressEvent) => void;
 
 const FPS = 30;
-/** Rough length of one shot inside a dish scene. */
-const SHOT_LENGTH = 4;
-/** Shortest shot we'll cut an AI clip down to. */
-const MIN_CLIP_SHOT = 2.2;
-/** Most we'll slow an AI clip down to fill a shot before padding with camera moves. */
-const MAX_SLOWMO = 1.6;
 /** AI clips generated at once (the APIs queue the rest anyway). */
 const MOTION_CONCURRENCY = 6;
 /** Scenes rendered at once. Each FFmpeg process is already multi-threaded. */
@@ -76,12 +72,6 @@ export const JOBS_ROOT = path.join(os.tmpdir(), "plate-studio");
 
 export function jobOutputPath(jobId: string): string {
   return path.join(JOBS_ROOT, jobId, "final_video.mp4");
-}
-
-/** Dish photos are either a public URL (menu import) or a data URI (user upload). */
-async function loadImage(src: string): Promise<Buffer> {
-  const dataUri = /^data:image\/[a-z+.-]+;base64,/i.exec(src);
-  return dataUri ? Buffer.from(src.slice(dataUri[0].length), "base64") : fetchBuffer(src);
 }
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
@@ -112,17 +102,20 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
   // 1. Assets: photos cropped to 16:9, text layers rendered
   // -------------------------------------------------------------------------
   emit("assets", "active", `Preparing ${plural(dishes.length, "photo")}`);
+  // Validate duplicates before making any paid motion or voice requests.
+  const images = await prepareDishImages(dishes);
   const stills = new Map(dishes.map((d) => [d.id, path.join(dir, `still_${d.id}.jpg`)]));
+  const fallbackStills: Partial<Record<keyof typeof LIFESTYLE_IMAGES, string>> = {};
+  if (project.lifestyle) {
+    for (const [name, url] of Object.entries(LIFESTYLE_IMAGES)) {
+      const file = path.join(dir, `lifestyle_${name}.jpg`);
+      await sharp(path.join(process.cwd(), "public", url))
+        .resize(STILL_WIDTH, STILL_HEIGHT, { fit: "cover" }).jpeg({ quality: 92 }).toFile(file);
+      fallbackStills[name as keyof typeof LIFESTYLE_IMAGES] = file;
+    }
+  }
   const [, overlays] = await Promise.all([
-    Promise.all(
-      dishes.map(async (d) =>
-        sharp(await loadImage(d.imageUrl))
-          .rotate() // respect EXIF orientation from phone photos
-          .resize(STILL_WIDTH, STILL_HEIGHT, { fit: "cover", position: sharp.strategy.attention })
-          .jpeg({ quality: 92 })
-          .toFile(stills.get(d.id)!),
-      ),
-    ),
+    Promise.all(dishes.map((d) => writeFile(stills.get(d.id)!, images.get(d.id)!))),
     Promise.all(
       scenes.map(async (s): Promise<{ files: string[]; boxes: FrameBoxes }> => {
         if (s.kind === "intro") {
@@ -158,6 +151,7 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
       // A café menu opens on a barista and ends over coffee; a restaurant on the stove and a shared meal.
       const setting = menuSetting(dishes.map((d) => ({ title: d.headline, description: dish(d)?.description ?? d.subline })));
       jobs.push(
+        { sceneId: intro.id, kind: "serving", image: null, prompt: servingPrompt(project.restaurant.trim(), setting), queries: stockQueries("serving", "", "", setting) },
         { sceneId: intro.id, kind: "kitchen", image: null, prompt: kitchenPrompt(setting), queries: stockQueries("kitchen", "", "", setting) },
         ...dishes.flatMap((d) => {
           const description = dish(d)?.description ?? d.subline;
@@ -167,43 +161,59 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
             { sceneId: d.id, kind: "bite" as const, image: null, prompt: bitePrompt(d.headline, description, project.restaurant.trim()), queries: stockQueries("bite", d.headline, description) },
           ];
         }),
+        { sceneId: outro.id, kind: "socializing", image: null, prompt: socializingPrompt(project.restaurant.trim(), setting), queries: stockQueries("socializing", "", "", setting) },
         { sceneId: outro.id, kind: "cheers", image: null, prompt: cheersPrompt(project.restaurant.trim(), setting), queries: stockQueries("cheers", "", "", setting) },
       );
     }
     if (!jobs.length) {
-      emit("motion", "fallback", "No video key; using local camera moves (add a free PEXELS_API_KEY for cooking and diner shots)");
+      emit("motion", "fallback", project.lifestyle ? "Using unique dish photos and bundled dining, socializing and serving images" : "Using one continuous camera move per dish photo");
       return { provider: "local-motion", clips };
     }
     const name = provider === "luma" ? "Luma Dream Machine" : provider === "replicate" ? "Replicate" : provider === "gemini" ? "Google Veo" : "Pexels";
-    emit("motion", "active", `${provider ? "Generating" : "Finding"} ${plural(jobs.length, "clip")} with ${name}${project.lifestyle ? " (cooking, plating, eating)" : ""}`);
+    emit("motion", "active", `${provider ? "Generating" : "Finding"} ${plural(jobs.length, "clip")} with ${name}${project.lifestyle ? " (eating, serving, socializing, cooking)" : ""}`);
     const usedStock = new Set<number>();
+    const usedContent = new Set<string>();
+    const acceptClip = async (file: string): Promise<Clip> => {
+      const duration = await probeDuration(file);
+      if (!duration || duration < 0.5) throw new Error("Video provider returned an unreadable clip");
+      // Different provider IDs or URLs can still contain the very same media.
+      const hash = createHash("sha256");
+      for await (const chunk of createReadStream(file)) hash.update(chunk);
+      const fingerprint = hash.digest("hex");
+      if (usedContent.has(fingerprint)) throw new Error("Video provider returned a repeated clip");
+      usedContent.add(fingerprint);
+      return { path: file, duration };
+    };
     let finished = 0;
     let fromAi = 0;
     await mapLimit(jobs, MOTION_CONCURRENCY, async (job) => {
       const out = path.join(dir, `motion_${job.sceneId}_${job.kind}.mp4`);
-      let file: string | null = null;
+      let accepted: Clip | null = null;
       if (provider) {
         try {
-          file = (await generateMotionClip(job.image, job.prompt, out))?.path ?? null;
-          if (file) fromAi++;
+          const file = (await generateMotionClip(job.image, job.prompt, out))?.path;
+          if (file) {
+            accepted = await acceptClip(file);
+            fromAi++;
+          }
         } catch (err) {
           console.warn(`[motion] ${job.kind} shot for scene ${job.sceneId} failed:`, err);
         }
       }
-      if (!file && stock && job.queries.length) {
+      if (!accepted && stock && job.queries.length) {
         try {
-          file = await fetchStockClip(job.queries, out, usedStock);
+          accepted = await acceptClip(await fetchStockClip(job.queries, out, usedStock));
         } catch (err) {
           console.warn(`[motion] stock ${job.kind} shot for scene ${job.sceneId} failed:`, err);
         }
       }
-      if (file) clips.set(clipKey(job.sceneId, job.kind), { path: file, duration: (await probeDuration(file)) ?? 5 });
+      if (accepted) clips.set(clipKey(job.sceneId, job.kind), accepted);
       emit("motion", "active", `${++finished} of ${plural(jobs.length, "clip")} back${provider ? ` from ${name}` : ""}`);
     });
     const fromStock = clips.size - fromAi;
     const summary = [fromAi && `${fromAi} AI`, fromStock && `${fromStock} stock`].filter(Boolean).join(" + ");
     if (clips.size === jobs.length) emit("motion", "done", `${summary} clips ready`);
-    else emit("motion", "fallback", clips.size ? `${summary} of ${jobs.length} clips; the rest use local moves` : "Video APIs unavailable; using local camera moves");
+    else emit("motion", "fallback", clips.size ? `${summary} clips; missing shots use unique local images` : "Video APIs unavailable; using unique local images");
     return { provider: fromAi ? provider! : fromStock ? "stock" : "local-motion", clips };
   })();
 
@@ -234,30 +244,14 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
   );
   const { durations, total } = timeline;
   const scenePaths = scenes.map((s) => path.join(dir, `scene_${s.id}.mp4`));
+  const shots = planShots(scenes, durations, stills, motion.clips, project.lifestyle, fallbackStills);
   let rendered = 0;
   emit("assemble", "active", `Rendering scene 1 of ${scenes.length}`);
 
   await mapLimit(scenes, RENDER_CONCURRENCY, async (scene, i) => {
     const duration = durations[i];
     const files = overlays[i].files;
-    let args: string[];
-    const clip = (kind: ShotKind) => motion.clips.get(clipKey(scene.id, kind)) ?? null;
-    if (scene.kind === "intro") {
-      const dishShots = dishes.map((d) => ({ still: stills.get(d.id)!, hero: motion.clips.get(clipKey(d.id, "hero")) ?? null }));
-      args = introSceneArgs({ duration, dishes: dishShots, kitchen: clip("kitchen"), overlay: files[0], out: scenePaths[i] });
-    }
-    else if (scene.kind === "outro") args = outroSceneArgs({ duration, still: stills.get(dishes[0].id)!, cheers: clip("cheers"), overlay: files[0], out: scenePaths[i] });
-    else {
-      args = dishSceneArgs({
-        duration,
-        dishIndex: scene.dishNumber - 1,
-        camera: scene.camera,
-        still: stills.get(scene.id)!,
-        clips: { fire: clip("fire"), plating: clip("plating"), hero: clip("hero"), bite: clip("bite") },
-        overlays: { title: files[0], tagline: files[1] },
-        out: scenePaths[i],
-      });
-    }
+    const args = sceneArgs({ scene, duration, shots: shots[i], overlays: files, out: scenePaths[i] });
     await runFfmpeg(args, 240_000);
     rendered++;
     emit("assemble", "active", rendered < scenes.length ? `Rendering scene ${rendered + 1} of ${scenes.length}` : "Mixing voice and music");
@@ -357,152 +351,58 @@ function animatedLayer(input: string, label: string, start: number, end: number 
 // Scenes
 // ---------------------------------------------------------------------------
 
-interface Clip {
-  path: string;
-  duration: number;
+/** Play each clip once. Slow it to fit; never loop back to its opening frames. */
+function clipShot(input: string, clip: Clip, frames: number, label: string): string {
+  const usable = Math.max(0.1, clip.duration - 0.1);
+  const stretch = Math.max(1, frames / FPS / usable);
+  return `${input}scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:force_original_aspect_ratio=increase,crop=${VIDEO_WIDTH}:${VIDEO_HEIGHT},` +
+    `setpts=${stretch.toFixed(6)}*(PTS-STARTPTS),fps=${FPS},tpad=stop_mode=clone:stop_duration=0.1,` +
+    `trim=end_frame=${frames},setpts=PTS-STARTPTS,setsar=1${label}`;
 }
 
-const clipKey = (sceneId: string, kind: ShotKind) => `${sceneId}:${kind}`;
-
-/** An AI clip as one shot: cropped to 16:9, started `from` seconds in, slowed down if the shot outlasts it, then trimmed. */
-function clipShot(input: string, clip: Clip, frames: number, label: string, from = 0): string {
-  const start = Math.min(from, Math.max(0, clip.duration - 1));
-  const usable = Math.max(0.5, clip.duration - start - 0.1);
-  const stretch = frames / FPS / usable;
-  return (
-    `${input}scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:force_original_aspect_ratio=increase,crop=${VIDEO_WIDTH}:${VIDEO_HEIGHT},` +
-    `${start ? `trim=start=${start.toFixed(2)},setpts=PTS-STARTPTS,` : ""}` +
-    `${stretch > 1 ? `setpts=${stretch.toFixed(3)}*PTS,` : ""}fps=${FPS},trim=end_frame=${frames},setpts=PTS-STARTPTS,setsar=1${label}`
-  );
-}
-
-const clipInput = (clip: Clip) => ["-stream_loop", "-1", "-i", clip.path];
-
-function introSceneArgs({
-  duration,
-  dishes,
-  kitchen,
-  overlay,
-  out,
-}: {
+/** Shared renderer: a scene only sees the unique sources assigned by planShots. */
+export function sceneArgs({ scene, duration, shots, overlays, out }: {
+  scene: ResolvedScene;
   duration: number;
-  dishes: { still: string; hero: Clip | null }[];
-  kitchen: Clip | null;
-  overlay: string;
+  shots: Shot[];
+  overlays: string[];
   out: string;
 }): string[] {
-  // Fast cuts: the kitchen in action (when we have it), then a glimpse of each dish:
-  // its AI clip when there is one, else a punch-in on the photo. At least 3 cuts, reusing dishes if needed.
-  const cuts = Math.max(3, Math.min(5, dishes.length + (kitchen ? 1 : 0)));
-  const frames = shotFrames(duration, cuts);
-  const order = Array.from({ length: cuts }, (_, c) => (kitchen ? (c === 0 ? -1 : (c - 1) % dishes.length) : c % dishes.length));
-  // Inputs: dish photos, the title layer, then every clip a cut uses (one input per cut, so reused clips stay independent).
-  const inputs = [...dishes.flatMap((d) => stillInput(d.still, duration)), ...stillInput(overlay, duration)];
-  const overlayIdx = dishes.length;
-  const stillUses = dishes.map((d, s) => (d.hero ? 0 : order.filter((o) => o === s).length));
-  const parts = dishes.flatMap((_, s) => (stillUses[s] ? [`[${s}:v]split=${stillUses[s]}${Array.from({ length: stillUses[s] }, (_, u) => `[i${s}_${u}]`).join("")}`] : []));
-  const seen = dishes.map(() => 0);
-  let nextClipInput = overlayIdx + 1;
-  order.forEach((s, c) => {
-    const f = frames[c];
-    const clip = s < 0 ? kitchen! : dishes[s].hero;
-    if (clip) {
-      inputs.push(...clipInput(clip));
-      // Dish glimpses start partway in, so the intro doesn't give away the dish scene's opening.
-      parts.push(clipShot(`[${nextClipInput++}:v]`, clip, f, `[c${c}]`, s < 0 ? 0 : 1.5 + seen[s]++ * 1.2));
-      return;
+  const inputs: string[] = [];
+  const parts: string[] = [];
+  const frames = shotFrames(duration, Math.max(1, shots.length));
+  shots.forEach((shot, i) => {
+    if (shot.kind === "clip") {
+      inputs.push("-i", shot.clip.path);
+      parts.push(clipShot(`[${i}:v]`, shot.clip, frames[i], `[shot${i}]`));
+    } else {
+      inputs.push(...stillInput(shot.path, duration));
+      const moves = CAMERA_MOVES[scene.camera];
+      const move = moves[(Math.max(0, scene.dishNumber - 1) * 2 + i) % moves.length];
+      parts.push(`[${i}:v]trim=end_frame=${frames[i]},setpts=PTS-STARTPTS,${moveFilter(move, frames[i])},setsar=1[shot${i}]`);
     }
-    parts.push(`[i${s}_${seen[s]++}]trim=end_frame=${f},setpts=PTS-STARTPTS,${moveFilter("punchIn", f)},setsar=1[c${c}]`);
   });
-  const title = animatedLayer(`[${overlayIdx}:v]`, "title", 0.35, duration - TRANSITION - 0.2, { dy: 50 });
-  const filter = [
-    ...parts,
-    `${order.map((_, c) => `[c${c}]`).join("")}concat=n=${cuts}:v=1:a=0,${GRADE},eq=brightness=-0.16:saturation=1.1,fade=in:st=0:d=0.5[base]`,
-    title.prep,
-    `[base][title]overlay=${title.pos},format=yuv420p[v]`,
-  ].join(";");
-  return [...inputs, "-filter_complex", filter, "-map", "[v]", ...encodeArgs(duration, out)];
-}
-
-type DishClip = "fire" | "plating" | "hero" | "bite";
-type DishShot = { clip: Clip } | { still: true };
-
-function dishSceneArgs({
-  duration,
-  dishIndex,
-  camera,
-  still,
-  clips,
-  overlays,
-  out,
-}: {
-  duration: number;
-  dishIndex: number;
-  camera: CameraStyle;
-  still: string;
-  clips: Record<DishClip, Clip | null>;
-  overlays: { title: string; tagline: string };
-  out: string;
-}): string[] {
-  // Use as many AI clips as the scene has room for, most important first.
-  const room = Math.max(1, Math.floor(duration / MIN_CLIP_SHOT));
-  const kept = new Set((["hero", "fire", "bite", "plating"] as const).filter((k) => clips[k]).slice(0, room));
-  // With two or more clips the scene is all footage; camera moves on the photo only
-  // fill time the clips can't cover (even slowed down). Otherwise, the classic ~4s moves.
-  const clipSeconds = [...kept].reduce((t, k) => t + clips[k]!.duration * MAX_SLOWMO, 0);
-  // Without an animated hero clip (e.g. stock footage only), the dish photo still gets a shot.
-  const stillShots =
-    kept.size >= 2
-      ? Math.max(kept.has("hero") ? 0 : 1, Math.ceil((duration - clipSeconds) / SHOT_LENGTH))
-      : Math.max(2, Math.min(12, Math.round(duration / SHOT_LENGTH))) - kept.size;
-  const shots = kept.size + stillShots;
-  const frames = shotFrames(duration, shots);
-  // Story order: fire → plating → the dish → (camera moves) → the first bite.
-  const pick = (k: DishClip): DishShot[] => (kept.has(k) ? [{ clip: clips[k]! }] : []);
-  const plan: DishShot[] = [...pick("fire"), ...pick("plating"), ...pick("hero"), ...Array.from({ length: stillShots }, () => ({ still: true as const })), ...pick("bite")];
-
-  // Inputs: 0 = still, 1 = title layer, 2 = tagline layer, 3.. = AI clips in plan order
-  const inputs = [...stillInput(still, duration), ...stillInput(overlays.title, duration), ...stillInput(overlays.tagline, duration)];
-  const parts: string[] = stillShots ? [`[0:v]split=${stillShots}${Array.from({ length: stillShots }, (_, j) => `[s${j}]`).join("")}`] : [];
-  let nextClipInput = 3;
-  let stillIndex = 0;
-  plan.forEach((shot, j) => {
-    const f = frames[j];
-    if ("clip" in shot) {
-      inputs.push(...clipInput(shot.clip));
-      parts.push(clipShot(`[${nextClipInput++}:v]`, shot.clip, f, `[v${j}]`));
-      return;
-    }
-    const moves = CAMERA_MOVES[camera];
-    const move = moves[(camera === "auto" ? dishIndex * 2 + stillIndex : stillIndex) % moves.length];
-    parts.push(`[s${stillIndex++}]trim=end_frame=${f},setpts=PTS-STARTPTS,${moveFilter(move, f)},setsar=1[v${j}]`);
-  });
-  const textOut = duration - TRANSITION - 0.5;
-  const title = animatedLayer("[1:v]", "title", 0.25, textOut, { dx: -60 });
-  const tagline = animatedLayer("[2:v]", "tag", 1.4, textOut, { dy: 30 });
-  parts.push(
-    `${plan.map((_, j) => `[v${j}]`).join("")}concat=n=${shots}:v=1:a=0,${GRADE}[base]`,
-    title.prep,
-    tagline.prep,
-    `[base][title]overlay=${title.pos}[b1]`,
-    `[b1][tag]overlay=${tagline.pos},format=yuv420p[v]`,
-  );
+  // Lifestyle off: dedicated brand cards, with no dish photo recycled behind them.
+  if (!shots.length) {
+    inputs.push("-f", "lavfi", "-i", `color=c=${scene.kind === "intro" ? "0x21150f" : "0x101820"}:s=${VIDEO_WIDTH}x${VIDEO_HEIGHT}:r=${FPS}:d=${duration}`);
+    parts.push("[0:v]setsar=1[shot0]");
+  }
+  const count = Math.max(1, shots.length);
+  const join = count === 1 ? "[shot0]null" : `${shots.map((_, i) => `[shot${i}]`).join("")}concat=n=${count}:v=1:a=0`;
+  parts.push(`${join},${GRADE}${scene.kind === "dish" ? "" : ",eq=brightness=-0.18"}[base]`);
+  inputs.push(...overlays.flatMap((file) => stillInput(file, duration)));
+  const textOut = Math.max(0.8, duration - TRANSITION - 0.5);
+  const title = animatedLayer(`[${count}:v]`, "title", 0.25, scene.kind === "outro" ? null : textOut, scene.kind === "dish" ? { dx: -60 } : { dy: 40 });
+  parts.push(title.prep, `[base][title]overlay=${title.pos}[titled]`);
+  let last = "[titled]";
+  if (scene.kind === "dish") {
+    const tagline = animatedLayer(`[${count + 1}:v]`, "tagline", Math.min(1.4, duration / 3), textOut, { dy: 30 });
+    parts.push(tagline.prep, `[titled][tagline]overlay=${tagline.pos}[tagged]`);
+    last = "[tagged]";
+  }
+  const fade = scene.kind === "intro" ? "fade=in:st=0:d=0.5," : scene.kind === "outro" ? `fade=out:st=${(duration - 0.9).toFixed(2)}:d=0.9,` : "";
+  parts.push(`${last}${fade}format=yuv420p[v]`);
   return [...inputs, "-filter_complex", parts.join(";"), "-map", "[v]", ...encodeArgs(duration, out)];
-}
-
-function outroSceneArgs({ duration, still, cheers, overlay, out }: { duration: number; still: string; cheers: Clip | null; overlay: string; out: string }): string[] {
-  const frames = Math.round(duration * FPS);
-  const card = animatedLayer("[1:v]", "card", 0.4, null, { dy: 40 });
-  // Friends toasting stay recognizable under a light blur; the photo fallback is blurred into a backdrop.
-  const background = cheers
-    ? `${clipShot("[2:v]", cheers, frames, "")},gblur=sigma=5,${GRADE},eq=brightness=-0.22[base]`
-    : `[0:v]trim=end_frame=${frames},setpts=PTS-STARTPTS,${moveFilter("pullOut", frames)},setsar=1,gblur=sigma=16,${GRADE},eq=brightness=-0.2[base]`;
-  const filter = [
-    background,
-    card.prep,
-    `[base][card]overlay=${card.pos},fade=out:st=${(duration - 0.9).toFixed(2)}:d=0.9,format=yuv420p[v]`,
-  ].join(";");
-  return [...stillInput(still, duration), ...stillInput(overlay, duration), ...(cheers ? clipInput(cheers) : []), "-filter_complex", filter, "-map", "[v]", ...encodeArgs(duration, out)];
 }
 
 // ---------------------------------------------------------------------------

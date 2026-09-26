@@ -1,4 +1,5 @@
 import type { Dish } from "@/lib/types";
+import { LIFESTYLE_IMAGES } from "@/lib/shot-plan";
 
 /**
  * The ad project: the single editable description of an ad, shared by the
@@ -66,13 +67,13 @@ export interface AdProject {
   cta: string;
   website: string;
   music: boolean;
-  /** AI-generated cooking and diner shots around each dish (needs a video API key). */
+  /** Dining, serving and cooking shots, with bundled images when no API is available. */
   lifestyle: boolean;
   /** Always [intro, ...dish scenes, outro]. */
   scenes: Scene[];
 }
 
-export type LibraryDish = Dish & { uploaded?: boolean };
+export type LibraryDish = Dish & { uploaded?: boolean; locationId?: string };
 
 export interface ResolvedScene {
   id: string;
@@ -195,7 +196,6 @@ export function resolveScenes(p: AdProject, library: LibraryDish[]): ResolvedSce
   const dishes = dishScenes(p).filter((s) => s.dishId && byId.has(s.dishId));
   const r = p.restaurant.trim();
   const cta = p.cta.trim() || "Order now";
-  const firstImage = dishes.length ? byId.get(dishes[0].dishId!)!.imageUrl : "";
   const out: ResolvedScene[] = [];
 
   const push = (s: Scene, defaults: Omit<ResolvedScene, "id" | "kind" | "dishId" | "duration" | "camera" | "transition" | "overridden">) => {
@@ -229,7 +229,7 @@ export function resolveScenes(p: AdProject, library: LibraryDish[]): ResolvedSce
     subline: dishes.length > 1 ? "Now serving" : "Fresh from our kitchen",
     cta: "",
     voice: r ? INTRO_LINES[r.length % INTRO_LINES.length].replace("{r}", r) : "Hungry? Here's what's cooking today.",
-    imageUrl: firstImage,
+    imageUrl: p.lifestyle ? LIFESTYLE_IMAGES.serving : "",
   });
   dishes.forEach((s, i) => {
     const dish = byId.get(s.dishId!)!;
@@ -250,7 +250,7 @@ export function resolveScenes(p: AdProject, library: LibraryDish[]): ResolvedSce
     subline: p.website.trim(),
     cta,
     voice: `${cta.replace(/[.!?\s]+$/, "")}${r ? ` at ${r}` : ""}. See you soon!`,
-    imageUrl: firstImage,
+    imageUrl: p.lifestyle ? LIFESTYLE_IMAGES.socializing : "",
   });
   return out;
 }
@@ -303,9 +303,13 @@ const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max
 
 export function sanitizeProject(raw: unknown): AdProject {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const rawScenes = Array.isArray(o.scenes) ? (o.scenes as Record<string, unknown>[]) : [];
+  const rawScenes = Array.isArray(o.scenes) ? o.scenes.filter((s): s is Record<string, unknown> => !!s && typeof s === "object") : [];
+  const ids = new Set<string>();
   const scene = (s: Record<string, unknown>, kind: SceneKind): Scene => {
-    const out: Scene = { id: str(s.id, 64) || newSceneId(kind), kind };
+    const requested = str(s.id, 64) ?? "";
+    const id = /^[a-zA-Z0-9_-]+$/.test(requested) && !ids.has(requested) ? requested : newSceneId(kind);
+    ids.add(id);
+    const out: Scene = { id, kind };
     if (kind === "dish") out.dishId = str(s.dishId, 128);
     for (const [f, max] of [["headline", 80], ["price", 20], ["subline", 160], ["cta", 24], ["voice", 400]] as const) {
       const v = str(s[f], max);
@@ -331,12 +335,15 @@ export function sanitizeProject(raw: unknown): AdProject {
 
 export function sanitizeLibrary(raw: unknown, maxImageChars: number): LibraryDish[] {
   if (!Array.isArray(raw)) return [];
+  const ids = new Set<string>();
   return (raw as Record<string, unknown>[]).slice(0, 60).flatMap((d) => {
+    if (!d || typeof d !== "object") return [];
     const id = str(d.id, 128);
     const imageUrl = str(d.imageUrl, maxImageChars) ?? "";
-    if (!id) return [];
+    if (!id || ids.has(id)) return [];
     if (imageUrl && !/^(https?:\/\/|data:image\/[a-z+.-]+;base64,)/i.test(imageUrl)) return [];
-    return [{ id, title: str(d.title, 80) ?? "", price: str(d.price, 20) ?? "", description: str(d.description, 400) ?? "", imageUrl, uploaded: d.uploaded === true }];
+    ids.add(id);
+    return [{ id, title: str(d.title, 80) ?? "", price: str(d.price, 20) ?? "", description: str(d.description, 400) ?? "", imageUrl, uploaded: d.uploaded === true, ...(str(d.locationId, 256) ? { locationId: str(d.locationId, 256) } : {}) }];
   });
 }
 

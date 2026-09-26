@@ -1,4 +1,3 @@
-import { demoMenuFor } from "@/lib/demo-menus";
 import { safeFetch } from "@/lib/safe-fetch";
 import type { Dish, MenuImportResult } from "@/lib/types";
 
@@ -6,7 +5,7 @@ import type { Dish, MenuImportResult } from "@/lib/types";
  * Best-effort menu import from a Google Maps or Yelp URL:
  *   1. schema.org JSON-LD (Restaurant.hasMenu / MenuItem), which many sites embed
  *   2. Yelp's server-rendered /menu/<biz> markup
- *   3. Curated demo menu matched to the restaurant's cuisine, so the demo never dead-ends
+ *   3. Return an empty menu with a useful message if real dish photos aren't available
  *
  * Google Maps renders menus client-side, so for Maps links we usually only get
  * the restaurant name (from the URL) and fall through to step 3.
@@ -199,10 +198,10 @@ export async function importMenu(raw: string): Promise<MenuImportResult> {
     usable.length > 0
       ? { restaurant: restaurant || "Imported restaurant", source: "live", dishes: usable.slice(0, MAX_DISHES) }
       : {
-          restaurant: restaurant || "Demo Kitchen",
-          source: "demo",
-          dishes: demoMenuFor(`${restaurant} ${url.pathname}`),
-          note: note ?? "No menu photos were found on that page, so a sample menu was loaded.",
+          restaurant: restaurant || "Restaurant",
+          source: "unavailable",
+          dishes: [],
+          note: "No usable menu photos were found. Upload your dish photos to create an ad." + (note ? ` ${note}` : ""),
         };
 
   return result;

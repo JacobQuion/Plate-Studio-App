@@ -2,11 +2,10 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronLeft, Clapperboard, LoaderCircle, Sparkles } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import {
   dishScenes,
   estimateVoiceSeconds,
-  newProject,
   planTimeline,
   resolveScenes,
   setAdDishes,
@@ -14,7 +13,13 @@ import {
   type LibraryDish,
   type Timeline as TimelineData,
 } from "@/lib/ad-plan";
-import type { GenerateStreamEvent } from "@/lib/types";
+import type { GenerateDoneEvent, MenuImportResult } from "@/lib/types";
+import { activateLocation, archiveDish, archiveLocation, emptyWorkspace, restoreDish, restoreLocation, type Workspace } from "@/lib/workspace";
+import { loadWorkspace, saveWorkspace } from "@/lib/local-workspace";
+import { downloadRenderedVideo, readRenderEvents, renderKey } from "@/lib/render-client";
+import type { RestaurantLocation } from "@/lib/locations";
+import { LibraryPanel } from "./_components/LibraryPanel";
+import { LocationSearch } from "./_components/LocationSearch";
 import { ChatPane, type PendingPhoto } from "./_components/ChatPane";
 import { Preview } from "./_components/Preview";
 import { InfoButton } from "./_components/InfoButton";
@@ -22,38 +27,35 @@ import { RenderStatus } from "./_components/RenderStatus";
 import { Timeline } from "./_components/Timeline";
 import { fileToDataUri, formatTime as formatClock, freshStages, titleFromFilename, type ChatMessage, type GenState } from "./_components/shared";
 
-const SAMPLE_URL = "https://www.yelp.com/biz/caffe-strada-berkeley";
-
 type Snapshot = { project: AdProject; library: LibraryDish[] };
 
 const msgId = () => Math.random().toString(36).slice(2);
 /** Uploaded photos stay in the browser; the assistant only needs their metadata. */
 const stripUploads = (lib: LibraryDish[]) => lib.map((d) => (d.imageUrl.startsWith("data:") ? { ...d, imageUrl: "" } : d));
-/** Everything that affects the rendered video, for detecting unrendered edits. */
-const editKey = (p: AdProject, lib: LibraryDish[]) => JSON.stringify([p, lib.map((d) => [d.id, d.title, d.price, d.description, d.imageUrl.length])]);
 const PANEL_MIN = 300;
 const PANEL_MAX = 720;
 const PANEL_KEY = "plate-studio:panel-width";
 const clampPanel = (w: number) => Math.round(Math.max(PANEL_MIN, Math.min(PANEL_MAX, window.innerWidth * 0.6, w)));
-const download = (url: string) => {
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "";
-  a.click();
-};
-
 export default function Studio() {
-  const [project, setProject] = useState<AdProject>(newProject);
-  const [library, setLibrary] = useState<LibraryDish[]>([]);
+  const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
+  const { project, library } = workspace;
+  const setProject = useCallback((update: SetStateAction<AdProject>) => setWorkspace((w) => ({ ...w, project: typeof update === "function" ? update(w.project) : update })), []);
+  const setLibrary = useCallback((update: SetStateAction<LibraryDish[]>) => setWorkspace((w) => ({ ...w, library: typeof update === "function" ? update(w.library) : update })), []);
+  const [ready, setReady] = useState(false);
+  const [storageAvailable, setStorageAvailable] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("Loading local workspace…");
+  const [panel, setPanel] = useState<"context" | "library">("context");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [result, setResult] = useState<GenerateDoneEvent | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [linkRequest, setLinkRequest] = useState(0);
   const [cursor, setCursor] = useState(0);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingPhoto[]>([]);
   const [gen, setGen] = useState<GenState>({ phase: "idle" });
   const [renderedKey, setRenderedKey] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showVideo, setShowVideo] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [range, setRange] = useState<[number, number] | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -61,15 +63,15 @@ export default function Studio() {
   const videoRef = useRef<HTMLVideoElement>(null);
   /** Project state before each assistant turn, so the turn can be reverted. */
   const snapshots = useRef(new Map<string, Snapshot>());
-  /** Download the video as soon as the current render finishes. */
-  const exportAfterRender = useRef(false);
+  const renderLock = useRef(false);
+  const exportLock = useRef(false);
+  const uploadLock = useRef(false);
 
   const running = gen.phase === "running";
-  const result = gen.phase === "done" ? gen.result : null;
   const scenes = useMemo(() => resolveScenes(project, library), [project, library]);
   const hasDishes = scenes.some((s) => s.kind === "dish");
-  const stale = !!result && renderedKey !== editKey(project, library);
-  const videoMode = !!result && showVideo && !running;
+  const stale = !!result && renderedKey !== renderKey(project, library);
+  const videoMode = !!result && !running;
 
   // Real scene timings when the video matches the edits; estimates otherwise.
   const timeline: TimelineData = useMemo(() => {
@@ -95,7 +97,6 @@ export default function Studio() {
     },
     [result],
   );
-  const selected = scenes.find((s) => s.id === selectedId) ?? null;
 
   // The section picked on the timeline, clamped to the current length. It falls
   // back to the whole ad when edits shrink the ad past it.
@@ -108,6 +109,28 @@ export default function Studio() {
           sceneIds: scenes.filter((_, i) => timeline.starts[i] < span[1] && timeline.starts[i] + timeline.durations[i] > span[0]).map((s) => s.id),
         }
       : null;
+
+  // Restore before enabling edits; never overwrite saved photos with the empty initial state.
+  useEffect(() => {
+    let cancelled = false;
+    loadWorkspace().then((saved) => {
+      if (cancelled) return;
+      if (saved) setWorkspace(saved);
+      setStorageAvailable(true);
+      setSaveStatus("Saved on this device");
+    }).catch(() => {
+      if (!cancelled) setSaveStatus("Local saving unavailable. Keep this tab open to preserve your edits.");
+    }).finally(() => { if (!cancelled) setReady(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !storageAvailable) return;
+    let current = true;
+    setSaveStatus("Saving on this device…");
+    saveWorkspace(workspace).then(() => { if (current) setSaveStatus("Saved on this device"); }).catch(() => { if (current) setSaveStatus("Couldn't save locally. Keep this tab open and check available storage."); });
+    return () => { current = false; };
+  }, [workspace, ready, storageAvailable]);
 
   // Restore the context panel width this browser last used.
   useEffect(() => {
@@ -130,101 +153,108 @@ export default function Studio() {
   }, [scenes, selectedId, hasDishes]);
 
   // ---- Rendering -------------------------------------------------------------
-  const render = async (p: AdProject = project, lib: LibraryDish[] = library) => {
-    if (running) return;
-    const used = new Set(dishScenes(p).map((s) => s.dishId));
-    const key = editKey(p, lib);
+  const render = async () => {
+    if (renderLock.current || !ready || busy || uploading || exporting) return;
+    const used = new Set(dishScenes(project).map((s) => s.dishId));
+    const featured = library.filter((d) => used.has(d.id));
+    if (!featured.length) return setToast("Add at least one dish photo before rendering.");
+    if (featured.some((d) => !d.imageUrl)) return setToast("Add a photo for every selected dish before rendering.");
+    renderLock.current = true;
+    const key = renderKey(project, library);
     const startedAt = Date.now();
     let stages = freshStages();
     setGen({ phase: "running", stages, startedAt });
-    const fail = (message: string) => {
-      exportAfterRender.current = false;
-      setGen({ phase: "error", stages, message });
-    };
-
     try {
       const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          project: p,
-          library: lib.filter((d) => used.has(d.id)),
-        }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project, library: featured }),
+        signal: AbortSignal.timeout(15 * 60_000),
       });
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({}));
-        return fail(data.error ?? `Request failed (${res.status})`);
+        throw new Error(data.error ?? `Request failed (${res.status})`);
       }
-      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-      let buffer = "";
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += value;
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          const event = JSON.parse(line) as GenerateStreamEvent;
-          if (event.type === "progress") {
-            stages = {
-              ...stages,
-              [event.stage]: { status: event.status, detail: event.detail },
-            };
-            setGen({ phase: "running", stages, startedAt });
-          } else if (event.type === "done") {
-            setGen({
-              phase: "done",
-              stages,
-              result: event,
-              elapsed: (Date.now() - startedAt) / 1000,
-            });
-            setRenderedKey(key);
-            setShowVideo(true);
-            setCurrentTime(0);
-            if (exportAfterRender.current) {
-              exportAfterRender.current = false;
-              download(event.downloadUrl);
-            }
-            return;
-          } else {
-            return fail(event.message);
-          }
-        }
+      for await (const event of readRenderEvents(res.body)) {
+        if (event.type === "progress") {
+          stages = { ...stages, [event.stage]: { status: event.status, detail: event.detail } };
+          setGen({ phase: "running", stages, startedAt });
+        } else if (event.type === "done") {
+          setResult(event);
+          setGen({ phase: "done", stages, result: event, elapsed: (Date.now() - startedAt) / 1000 });
+          setRenderedKey(key);
+          setCurrentTime(0);
+          return;
+        } else throw new Error(event.message);
       }
-      fail("The render stream ended unexpectedly.");
+      throw new Error("The render connection ended before the video was ready. Please try again.");
     } catch (err) {
-      fail((err as Error).message);
-    }
+      setGen({ phase: "error", stages, message: err instanceof Error ? err.message : "Video generation failed. Please try again." });
+    } finally { renderLock.current = false; }
   };
 
   // ---- Chat --------------------------------------------------------------------
   const addFiles = async (files: File[]) => {
+    if (!ready || busy || running || exporting || uploadLock.current) return;
+    uploadLock.current = true;
+    setUploading(true);
+    const photos: PendingPhoto[] = [];
     for (const file of files.filter((f) => f.type.startsWith("image/"))) {
       try {
         const [full, thumb] = await Promise.all([fileToDataUri(file, 2880), fileToDataUri(file, 640, 0.8)]);
-        setPending((p) => [...p, { dishId: `up-${crypto.randomUUID()}`, name: file.name, full, thumb }]);
-      } catch {
-        setToast(`Couldn't read ${file.name}`);
-      }
+        photos.push({ dishId: `up-${crypto.randomUUID()}`, name: file.name, full, thumb });
+      } catch { setToast(`Couldn't read ${file.name}. Try a JPEG, PNG or WebP image.`); }
     }
+    if (photos.length) {
+      setPending((p) => [...p, ...photos]);
+      setWorkspace((w) => ({ ...w,
+        library: [...w.library, ...photos.map((p) => ({ id: p.dishId, title: titleFromFilename(p.name), price: "", description: "", imageUrl: p.full, uploaded: true }))],
+        project: setAdDishes(w.project, [...dishScenes(w.project).map((s) => s.dishId!), ...photos.map((p) => p.dishId)]),
+      }));
+    }
+    setUploading(false);
+    uploadLock.current = false;
   };
 
-  const openLink = () => setLinkRequest((n) => n + 1);
-
-  const trySample = () => {
-    send(`Make an ad from this menu: ${SAMPLE_URL}`);
+  const exportVideo = async () => {
+    if (!result || stale || running || exportLock.current) return;
+    exportLock.current = true;
+    setExporting(true);
+    try { await downloadRenderedVideo(result.downloadUrl); }
+    catch (err) { setToast(err instanceof Error ? err.message : "Export failed. Please try again."); }
+    finally { setExporting(false); exportLock.current = false; }
   };
 
-  const exportVideo = () => {
-    if (result && !stale) return download(result.downloadUrl);
-    exportAfterRender.current = true;
-    render();
+  const removeDish = (id: string) => {
+    if (!ready || busy || running || uploading || exporting) return;
+    setWorkspace((w) => archiveDish(w, id));
+    setPending((p) => p.filter((x) => x.dishId !== id));
+    snapshots.current.clear();
+  };
+
+  const addLocation = async (location: RestaurantLocation) => {
+    if (!ready || busy || running || uploading || exporting) return;
+    setSearchOpen(false);
+    setPanel("library");
+    setWorkspace((w) => activateLocation(w, location));
+    if (location.source === "manual") return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/scrape-menu", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: location.url }) });
+      const data = await res.json() as MenuImportResult & { error?: string };
+      if (!res.ok) throw new Error(data.error || "Menu import failed.");
+      const dishes: LibraryDish[] = data.dishes.map((d) => ({ ...d, id: `${location.id}:${d.id}`, locationId: location.id }));
+      setWorkspace((w) => {
+        const added = dishes.filter((d) => !w.library.some((x) => x.id === d.id));
+        return { ...w, library: [...w.library, ...added], project: setAdDishes(w.project, [...dishScenes(w.project).map((s) => s.dishId!), ...added.map((d) => d.id)]) };
+      });
+      setToast(dishes.length ? `Added ${dishes.length} dish photos from ${location.name}.` : "Location saved. Upload your dish photos to get started.");
+    } catch { setToast("Location saved. Menu photos couldn't be imported; upload your own photos."); }
+    finally { setBusy(false); }
   };
 
   const undo = (messageId: string) => {
     const snap = snapshots.current.get(messageId);
-    if (!snap || busy || running) return;
+    if (!snap || !ready || busy || running || uploading || exporting) return;
     setProject(snap.project);
     // Restore edited dish details, but keep dishes added since (e.g. uploads) in the library.
     const known = new Set(snap.library.map((d) => d.id));
@@ -234,20 +264,10 @@ export default function Studio() {
   };
 
   const send = async (text: string) => {
-    if (busy) return;
+    if (busy || running || uploading || exporting || !ready) return;
     const photos = pending;
     const before: Snapshot = { project, library };
-    const lib: LibraryDish[] = [
-      ...library,
-      ...photos.map((p) => ({
-        id: p.dishId,
-        title: titleFromFilename(p.name),
-        price: "",
-        description: "",
-        imageUrl: p.full,
-        uploaded: true,
-      })),
-    ];
+    const lib = library;
     const userMsg: ChatMessage = {
       id: msgId(),
       role: "user",
@@ -303,7 +323,7 @@ export default function Studio() {
           undoable,
         },
       ]);
-      if (data.render) render(data.project, merged);
+      if (data.render) setToast("Your edits are ready. Click Render to generate the video.");
     } catch (err) {
       setMessages((m) => [
         ...m,
@@ -320,7 +340,7 @@ export default function Studio() {
   };
 
   // ---- Editor ------------------------------------------------------------------
-  const editing = busy || running;
+  const editing = busy || running || uploading || exporting || !ready;
 
   const selectScene = (id: string) => {
     setSelectedId(id);
@@ -371,7 +391,7 @@ export default function Studio() {
     window.addEventListener("pointerup", up);
   };
 
-  const toggleDish = (id: string) => setProject((p) => setAdDishes(p, dishIds.includes(id) ? dishIds.filter((x) => x !== id) : [...dishIds, id]));
+  const toggleDish = (id: string) => setProject((p) => { const ids = dishScenes(p).map((s) => s.dishId!); return setAdDishes(p, ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]); });
 
   return (
     <div data-editing={editing || undefined} className="flex min-h-dvh flex-col bg-[#08080a] lg:h-dvh lg:overflow-hidden">
@@ -419,25 +439,26 @@ export default function Studio() {
             align="end"
             items={[
               { title: "Render", text: "Builds the video with your latest edits so you can preview it here." },
-              { title: "Export", text: "Downloads your ad as an MP4, rendering it first if there are new edits." },
+              { title: "Export", text: "Downloads the completed MP4. Render your latest edits first." },
             ]}
           />
           <button
             onClick={() => render()}
-            disabled={!hasDishes || busy || running || (!!result && !stale)}
-            title={result && !stale ? "The video is up to date" : "Render the video with your latest edits"}
+            disabled={!hasDishes || editing}
+            title="Generate a video from your selected dishes"
             className="inline-flex h-10 items-center gap-2 rounded-full border border-white/15 px-5 text-[15px] font-semibold text-white transition hover:bg-white/[0.06] disabled:opacity-40"
           >
             <Clapperboard className="size-4" /> Render
           </button>
           <button
             onClick={exportVideo}
-            disabled={!hasDishes || busy || running}
+            disabled={!result || stale || editing}
+            title={!result ? "Render a video before exporting" : stale ? "Render your latest changes before exporting" : "Download the generated MP4"}
             className="accent-fill accent-ring relative inline-flex h-10 items-center gap-2 rounded-full bg-gradient-to-r from-brand-700 to-brand-500 px-5 text-[15px] font-semibold text-white transition hover:brightness-110 disabled:opacity-40"
           >
             {/* Keep the label in place while rendering so the button doesn't change size */}
-            <span className={running ? "invisible" : undefined}>Export</span>
-            {running && <LoaderCircle aria-label="Making video" className="absolute inset-0 m-auto size-4 animate-spin" />}
+            <span className={exporting ? "invisible" : undefined}>Export</span>
+            {exporting && <LoaderCircle aria-label="Downloading video" className="absolute inset-0 m-auto size-4 animate-spin" />}
           </button>
         </div>
       </header>
@@ -471,25 +492,25 @@ export default function Studio() {
                 label="About adding context"
                 items={[
                   { title: "Upload media", text: "Click Media or drag dish photos onto this panel to add them to your ad." },
-                  { title: "Yelp / Google Maps", text: "Paste your restaurant's link and we'll import your name, menu and dish photos." },
+                  { title: "Yelp / Google Maps", text: "Search by restaurant name and city, then save the location and add your dish photos." },
                 ]}
               />
             </span>
           </div>
-          <ChatPane
-            messages={messages}
-            busy={busy}
-            pending={pending}
-            linkRequest={linkRequest}
-            library={library}
-            inAd={dishIds}
-            dishesDisabled={editing}
-            onToggleDish={toggleDish}
-            onAddFiles={addFiles}
-            onRemovePending={(id) => setPending((p) => p.filter((x) => x.dishId !== id))}
-            onSend={send}
-            onUndo={undo}
-          />
+          <div className="flex shrink-0 gap-2 px-4 pt-3">
+            <button onClick={() => setPanel("context")} className={`rounded-lg px-3 py-2 text-sm ${panel === "context" ? "bg-white/10 text-white" : "text-zinc-500"}`}>Assistant</button>
+            <button onClick={() => setPanel("library")} className={`rounded-lg px-3 py-2 text-sm ${panel === "library" ? "bg-white/10 text-white" : "text-zinc-500"}`}>Dishes, locations & history</button>
+          </div>
+          {panel === "context" ? <ChatPane
+            messages={messages} busy={editing} pending={pending} onSearch={() => setSearchOpen(true)} library={library} inAd={dishIds} dishesDisabled={editing}
+            onToggleDish={toggleDish} onAddFiles={addFiles} onRemovePending={removeDish} onSend={send} onUndo={undo}
+          /> : <LibraryPanel workspace={workspace} disabled={editing} onSearch={() => setSearchOpen(true)} onAddFiles={addFiles} onToggleDish={toggleDish}
+            onRemoveDish={removeDish} onRestoreDish={(id) => setWorkspace((w) => restoreDish(w, id))}
+            onSelectLocation={(id) => { const l = workspace.locations.find((x) => x.id === id); if (l) setWorkspace((w) => activateLocation(w, l)); }}
+            onRemoveLocation={(id) => { setWorkspace((w) => archiveLocation(w, id)); snapshots.current.clear(); }}
+            onRestoreLocation={(id) => setWorkspace((w) => restoreLocation(w, id))}
+          />}
+          <p role="status" className="shrink-0 border-t border-white/5 px-4 py-2 text-xs text-zinc-500">{saveStatus}</p>
         </aside>
 
         {/* Editor: stage and timeline --------------------------------------- */}
@@ -500,11 +521,11 @@ export default function Studio() {
               <div className="h-[calc((100vw-1rem)*9/16)] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1">
                 <Preview
                   ref={videoRef}
-                  scene={hasDishes ? selected : null}
-                  rendering={running}
+                  gen={gen}
+                  dishCount={dishIds.length}
+                  stale={stale}
                   result={result}
-                  showVideo={showVideo}
-                  busy={busy}
+                  busy={editing}
                   onVideoClick={() => {
                     const id = sceneAt(videoRef.current?.currentTime ?? 0);
                     if (id) setSelectedId(id);
@@ -516,11 +537,11 @@ export default function Studio() {
                     if (id && videoRef.current && !videoRef.current.paused) setSelectedId(id);
                   }}
                   onAddFiles={addFiles}
-                  onLink={openLink}
-                  onSample={trySample}
+                  onSearch={() => setSearchOpen(true)}
+                  onRender={() => void render()}
                 />
               </div>
-              <RenderStatus gen={gen} stale={stale} canRender={hasDishes && !busy} hasScene={hasDishes} showVideo={showVideo} onRender={() => render()} onShowVideo={setShowVideo} />
+              <RenderStatus gen={gen} stale={stale} canRender={hasDishes && !editing} hasScene={hasDishes} onRender={() => void render()} />
             </div>
 
           </main>
@@ -538,6 +559,7 @@ export default function Studio() {
         </div>
       </div>
 
+      {searchOpen && <LocationSearch onClose={() => setSearchOpen(false)} onSelect={(l) => void addLocation(l)} />}
       <AnimatePresence>
         {toast && (
           <motion.div

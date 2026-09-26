@@ -56,10 +56,19 @@ export async function fetchStockClip(queries: StockQuery[], outPath: string, use
       .filter((c): c is { id: number; file: PexelsFile } => c.file !== null)
       .slice(0, 6);
     if (!candidates.length) continue;
-    const pick = candidates[Math.floor(Math.random() * candidates.length)];
-    used.add(pick.id);
-    await writeFile(outPath, await fetchBuffer(pick.file.link, 150 * 1024 * 1024, 60_000));
-    return outPath;
+    // Reserve synchronously before downloading: concurrent shots share this set.
+    // If a download fails, try another unused candidate instead of losing the shot.
+    while (candidates.length) {
+      const [pick] = candidates.splice(Math.floor(Math.random() * candidates.length), 1);
+      if (used.has(pick.id)) continue;
+      used.add(pick.id);
+      try {
+        await writeFile(outPath, await fetchBuffer(pick.file.link, 150 * 1024 * 1024, 60_000));
+        return outPath;
+      } catch (err) {
+        console.warn(`[stock] Download failed for video ${pick.id}; trying another candidate:`, err);
+      }
+    }
   }
   throw new Error(`No stock footage for "${queries[0]?.query}"`);
 }

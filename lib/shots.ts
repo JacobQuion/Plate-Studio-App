@@ -14,7 +14,7 @@
  * motion ("patty smashed on a griddle") far better than generic "cooking".
  */
 
-export type ShotKind = "fire" | "plating" | "hero" | "bite" | "kitchen" | "cheers";
+export type ShotKind = "fire" | "plating" | "hero" | "bite" | "kitchen" | "cheers" | "serving" | "socializing";
 
 /** Dark, high-contrast food-commercial look for the kitchen shots. */
 const DRAMA =
@@ -329,6 +329,16 @@ export function cheersPrompt(restaurant: string, setting: Setting = "kitchen"): 
   }
 }
 
+export function servingPrompt(restaurant: string, setting: Setting = "kitchen"): string {
+  const subject = setting === "cafe" ? "coffee and pastries" : setting === "bar" ? "drinks and small plates" : "freshly prepared plates of food";
+  return `At ${restaurant || "a welcoming neighborhood restaurant"}, a friendly waiter in an apron brings ${subject} to a table, carefully sets them down in front of smiling guests and welcomes them. Medium shot that clearly shows the server and seated diners. ${PEOPLE} ${WARM}. ${CLEAN}`;
+}
+
+export function socializingPrompt(restaurant: string, setting: Setting = "kitchen"): string {
+  const place = setting === "cafe" ? "cafe over coffee and pastries" : setting === "bar" ? "bar over drinks and small plates" : "restaurant over a shared meal";
+  return `Friends socializing at ${restaurant ? `${restaurant}, a ` : "a "}${place}, chatting, laughing, listening and passing a plate around the table. Candid medium wide shot showing the group. ${PEOPLE} ${WARM}. ${CLEAN}`;
+}
+
 /**
  * A stock footage search, plus patterns the clip's title must all match. Pexels search
  * is loose ("seafood cooking" returns a fish market), so results that don't mention
@@ -346,6 +356,8 @@ const BREWING = /coffee|barista|espresso|latte|brew|grind|bean|froth/;
 const COFFEE_TIME = /coffee|cafe|latte|cappuccino|espresso|mug/;
 const BAR = /bar|cocktail|drink|beer|wine|toast|cheers|pour/;
 const DINERS = /eat|dining|dinner|lunch|bite|tast|enjoy/;
+const PEOPLE_MATCH = /people|person|friends|couple|family|group|woman|women|man|men|guest|customer|diner/;
+const SERVICE = /waiter|waitress|server|serving|bringing|delivering/;
 
 /** Always-available footage for each setting, after the dish-specific searches. */
 const GENERIC: Record<Setting, Record<"fire" | "plating" | "bite" | "kitchen" | "cheers", StockQuery[]>> = {
@@ -380,6 +392,20 @@ const GENERIC: Record<Setting, Record<"fire" | "plating" | "bite" | "kitchen" | 
  */
 export function stockQueries(kind: ShotKind, title = "", description = "", setting?: Setting): StockQuery[] {
   if (kind === "hero") return [];
+  if (kind === "serving") {
+    const subject = setting === "cafe" ? "coffee cafe" : setting === "bar" ? "drinks bar" : "food restaurant";
+    return [
+      { query: `waiter serving ${subject} guests`, match: [SERVICE, /food|plate|meal|dish|restaurant|coffee|drink|cafe|bar/] },
+      { query: `waitress bringing ${subject} table`, match: [SERVICE] },
+    ];
+  }
+  if (kind === "socializing") {
+    const place = setting === "cafe" ? "cafe coffee" : setting === "bar" ? "bar drinks" : "restaurant dinner";
+    return [
+      { query: `friends laughing talking ${place}`, match: [PEOPLE_MATCH, /talk|laugh|chat|dining|dinner|meal|restaurant|coffee|cafe|bar|drink/] },
+      { query: `people socializing ${place}`, match: [PEOPLE_MATCH] },
+    ];
+  }
   if (kind === "kitchen" || kind === "cheers") return GENERIC[setting ?? "kitchen"][kind];
   const a = actionsFor(title, description);
   const specific =
@@ -391,5 +417,7 @@ export function stockQueries(kind: ShotKind, title = "", description = "", setti
     }[kind];
   // Cafe and bar searches name the action already; a meal's cooking shot must also show cooking, its bite shot eating.
   const match = a.setting ? [a.match] : kind === "fire" ? [a.match, COOKING] : kind === "bite" ? [a.match, DINERS] : [a.match];
-  return [...specific.map((query) => ({ query, match })), ...GENERIC[a.setting ?? "kitchen"][kind]];
+  const queries = [...specific.map((query) => ({ query, match })), ...GENERIC[a.setting ?? "kitchen"][kind]];
+  // A food-only close-up is not an eating shot, even if the search returns it.
+  return kind === "bite" ? queries.map((q) => ({ ...q, match: [...q.match, PEOPLE_MATCH] })) : queries;
 }

@@ -18,18 +18,14 @@ export function RenderStatus({
   stale,
   canRender,
   hasScene,
-  showVideo,
   onRender,
-  onShowVideo,
 }: {
   gen: GenState;
   /** There are edits the current video doesn't include. */
   stale: boolean;
   canRender: boolean;
   hasScene: boolean;
-  showVideo: boolean;
   onRender: () => void;
-  onShowVideo: (show: boolean) => void;
 }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -77,9 +73,6 @@ export function RenderStatus({
       <Row>
         <span className="flex items-center gap-2 text-zinc-300">
           <span className="size-2 rounded-full bg-amber-400" /> You have changes that aren&apos;t in the video yet.
-          <button onClick={() => onShowVideo(!showVideo)} className="text-zinc-500 underline-offset-2 hover:text-white hover:underline">
-            {showVideo ? "Show my edits" : "Play last version"}
-          </button>
         </span>
         <PrimaryButton onClick={onRender} disabled={!canRender}>
           Update video
@@ -103,7 +96,7 @@ export function RenderStatus({
       <span className="flex items-center gap-2 text-zinc-500">
         {hasScene && (
           <>
-            <MessageSquare className="size-4" /> Ask the assistant to change anything. Hit Export when it looks right.
+            <MessageSquare className="size-4" /> Click Render to create your video. Export downloads the finished MP4.
           </>
         )}
       </span>

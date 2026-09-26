@@ -4,7 +4,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUp, Check, Globe, ImagePlus, MapPin, Megaphone, Mic, MousePointerClick, Plus, Sparkles, Store, Tag, Undo2, UtensilsCrossed, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { MAX_AD_DISHES, type LibraryDish } from "@/lib/ad-plan";
-import { findMenuLink } from "@/lib/menu-link";
 import { cx, type ChatMessage } from "./shared";
 
 export interface PendingPhoto {
@@ -33,8 +32,8 @@ const ADD_ITEMS: ContextItem[] = [
   },
   {
     id: "link",
-    label: "Yelp or Google Maps link",
-    hint: "We'll pull your menu and photos",
+    label: "Find a restaurant",
+    hint: "Search by name and city",
     icon: MapPin,
   },
 ];
@@ -88,7 +87,7 @@ export function ChatPane({
   messages,
   busy,
   pending,
-  linkRequest,
+  onSearch,
   library,
   inAd,
   dishesDisabled,
@@ -101,8 +100,7 @@ export function ChatPane({
   messages: ChatMessage[];
   busy: boolean;
   pending: PendingPhoto[];
-  /** Bumped by the parent to open the link box (e.g. from the Dishes tab). */
-  linkRequest: number;
+  onSearch: () => void;
   library: LibraryDish[];
   /** Dish ids featured in the ad, in order. */
   inAd: string[];
@@ -116,9 +114,6 @@ export function ChatPane({
   const [draft, setDraft] = useState("");
   const [dragging, setDragging] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [linkOpen, setLinkOpen] = useState(false);
-  const [linkDraft, setLinkDraft] = useState("");
-  const [linkError, setLinkError] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -140,10 +135,6 @@ export function ChatPane({
   }, [draft]);
 
   useEffect(() => {
-    if (linkRequest) setLinkOpen(true);
-  }, [linkRequest]);
-
-  useEffect(() => {
     if (!menuOpen) return;
     const close = (e: MouseEvent) => !menu.current?.contains(e.target as Node) && setMenuOpen(false);
     window.addEventListener("mousedown", close);
@@ -156,25 +147,10 @@ export function ChatPane({
     setDraft("");
   };
 
-  const closeLink = () => {
-    setLinkOpen(false);
-    setLinkDraft("");
-    setLinkError(false);
-  };
-
-  const importLink = () => {
-    const link = findMenuLink(linkDraft);
-    if (!link) return setLinkError(true);
-    if (busy) return;
-    const note = draft.trim();
-    send(note ? `${note}\n${link}` : `Import the menu from this link: ${link}`);
-    closeLink();
-  };
-
   const pick = (item: ContextItem) => {
     setMenuOpen(false);
     if (item.id === "media") return fileInput.current?.click();
-    if (item.id === "link") return setLinkOpen(true);
+    if (item.id === "link") return onSearch();
     if (!item.prefill) return;
     // Replace an untouched prefill from another item; otherwise start a new line after what's typed.
     const next = !draft.trim() || PREFILLS.has(draft) ? item.prefill : `${draft.trimEnd()}\n${item.prefill}`;
@@ -254,53 +230,13 @@ export function ChatPane({
       {/* Composer ------------------------------------------------------------ */}
       <div className="shrink-0 px-4 pt-2 pb-4">
         <div className="accent-ring relative rounded-2xl border border-white/10 bg-white/[0.03] transition focus-within:border-white/20">
-          <AnimatePresence initial={false}>
-            {linkOpen && (
-              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    importLink();
-                  }}
-                  className="px-3 pt-3"
-                >
-                  <div className={cx("flex items-center gap-2 rounded-xl bg-white/[0.05] py-1 pr-1 pl-3 ring-1", linkError ? "ring-rose-400/50" : "ring-white/[0.08]")}>
-                    <MapPin className="size-4 shrink-0 text-zinc-500" />
-                    <input
-                      autoFocus
-                      value={linkDraft}
-                      onChange={(e) => {
-                        setLinkDraft(e.target.value);
-                        setLinkError(false);
-                      }}
-                      onKeyDown={(e) => e.key === "Escape" && closeLink()}
-                      placeholder="Paste your Yelp or Google Maps link"
-                      className="min-w-0 flex-1 bg-transparent py-1.5 text-sm text-white outline-none placeholder:text-zinc-500"
-                    />
-                    <button
-                      type="submit"
-                      disabled={busy || !linkDraft.trim()}
-                      className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-zinc-950 transition hover:bg-zinc-200 disabled:opacity-30"
-                    >
-                      Import
-                    </button>
-                    <button type="button" onClick={closeLink} aria-label="Close" className="flex size-7 items-center justify-center rounded-lg text-zinc-500 hover:text-white">
-                      <X className="size-4" />
-                    </button>
-                  </div>
-                  {linkError && <p className="mt-1.5 px-1 text-xs text-rose-300">That doesn&apos;t look like a Yelp or Google Maps link.</p>}
-                </form>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* Chips: add sources, then every known dish (tap to put it in the ad or take it out) */}
           <div className="flex gap-1.5 overflow-x-auto px-3 pt-3 [scrollbar-width:none]">
-            <Chip onClick={() => fileInput.current?.click()}>
+            <Chip onClick={() => fileInput.current?.click()} disabled={busy}>
               <ImagePlus className="size-3.5" /> Media
             </Chip>
-            <Chip onClick={() => setLinkOpen(true)} active={linkOpen}>
-              <MapPin className="size-3.5" /> Yelp/Google Maps
+            <Chip onClick={onSearch} disabled={busy}>
+              <MapPin className="size-3.5" /> Find restaurant
             </Chip>
             {library.length > 0 && <span className="mx-0.5 w-px shrink-0 self-stretch bg-white/10" />}
             {library.map((d) => {
@@ -335,6 +271,7 @@ export function ChatPane({
                   <img src={p.thumb} alt={p.name} className="size-14 rounded-lg object-cover ring-1 ring-white/10" />
                   <button
                     onClick={() => onRemovePending(p.dishId)}
+                    disabled={busy}
                     aria-label={`Remove ${p.name}`}
                     className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-white/15 hover:text-white"
                   >
@@ -349,8 +286,9 @@ export function ChatPane({
             <div ref={menu} className="relative">
               <button
                 onClick={() => setMenuOpen((o) => !o)}
-                aria-label="Add photos, a link or details"
-                title="Add photos, a link or details"
+                disabled={busy}
+                aria-label="Add photos, a restaurant or details"
+                title="Add photos, a restaurant or details"
                 className={cx("flex size-10 items-center justify-center rounded-xl transition", menuOpen ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/[0.06] hover:text-white")}
               >
                 <Plus className={cx("size-5 transition", menuOpen && "rotate-45")} />
