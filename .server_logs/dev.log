@@ -747,3 +747,8 @@ sh: next: command not found
  POST /api/generate 200 in 22.1s (next.js: 61ms, application-code: 22.0s)
  GET /api/video/edbfd937-5371-4273-9bb2-ce2fb45e0bfb 206 in 498ms (next.js: 463ms, application-code: 36ms)
  GET /api/video/edbfd937-5371-4273-9bb2-ce2fb45e0bfb 206 in 13.8s (next.js: 8ms, application-code: 13.8s)
+
+> plate-studio@0.1.0 dev
+> next dev
+
+sh: next: command not found
