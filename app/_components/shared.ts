@@ -3,12 +3,20 @@ import type { GenerateDoneEvent, StageId, StageStatus } from "@/lib/types";
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
-export type StageState = { status: StageStatus | "pending"; detail?: string };
+export type StageState = { status: StageStatus | "pending"; detail?: string; completed?: number; total?: number };
 export type GenState =
   | { phase: "idle" }
-  | { phase: "running"; stages: Record<StageId, StageState>; startedAt: number }
+  /** eta: the server's latest estimate of seconds left, and when it arrived. */
+  | { phase: "running"; stages: Record<StageId, StageState>; startedAt: number; eta?: { seconds: number; at: number } }
   | { phase: "done"; stages: Record<StageId, StageState>; result: GenerateDoneEvent; elapsed: number }
   | { phase: "error"; stages: Record<StageId, StageState>; message: string };
+
+export const STAGES: { id: StageId; label: string }[] = [
+  { id: "assets", label: "Preparing photos" },
+  { id: "motion", label: "Adding motion" },
+  { id: "voice", label: "Recording voiceover" },
+  { id: "assemble", label: "Putting it together" },
+];
 
 export const freshStages = (): Record<StageId, StageState> => ({
   assets: { status: "pending" },

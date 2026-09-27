@@ -1,4 +1,5 @@
 import { sanitizeLibrary, sanitizeProject, type AdProject, type LibraryDish } from "@/lib/ad-plan";
+import { attachRender, isProjectId } from "@/lib/projects";
 import { generateAd } from "@/lib/video-pipeline";
 import type { GenerateStreamEvent } from "@/lib/types";
 
@@ -7,19 +8,24 @@ export const runtime = "nodejs";
 export const maxDuration = 600;
 
 /**
- * POST /api/generate  { project: AdProject, library: LibraryDish[] }
+ * POST /api/generate  { project: AdProject, library: LibraryDish[], projectId?, editKey? }
  *
  * Library images are public http(s) URLs or base64 image data URIs (uploads).
  * Renders the ad and streams progress back as NDJSON (one GenerateStreamEvent
  * per line). The final line is either { type: "done", videoUrl, ... } or { type: "error" }.
+ * With a projectId, the finished video is saved to that project for the dashboard.
  */
 export async function POST(req: Request) {
   let project: AdProject;
   let library: LibraryDish[];
+  let projectId: string | null;
+  let editKey: string;
   try {
     const body = (await req.json()) as Record<string, unknown>;
     project = sanitizeProject(body.project);
     library = sanitizeLibrary(body.library, 12 * 1024 * 1024);
+    projectId = typeof body.projectId === "string" && isProjectId(body.projectId) ? body.projectId : null;
+    editKey = typeof body.editKey === "string" ? body.editKey : "";
   } catch {
     return Response.json({ error: "Expected a JSON body with { project, library }" }, { status: 400 });
   }
@@ -34,8 +40,15 @@ export async function POST(req: Request) {
           // Client disconnected; keep rendering so the file still lands on disk.
         }
       };
+      const startedAt = Date.now();
       try {
         const result = await generateAd(project, library, send);
+        if (projectId) {
+          const { jobId, durationSeconds, timeline, layout, script, providers } = result;
+          await attachRender(projectId, { jobId, durationSeconds, timeline, layout, script, providers, editKey, elapsed: (Date.now() - startedAt) / 1000 }, { project, library }).catch((err) =>
+            console.warn("[generate] couldn't save the render to the project:", err),
+          );
+        }
         send({
           type: "done",
           jobId: result.jobId,

@@ -202,7 +202,7 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "import_menu",
     description:
-      "Import dishes from a Yelp or Google Maps link into the library. Sets the restaurant name if it's empty, and fills an empty ad with the first dishes. Returns the dishes added.",
+      "Import dishes from a Yelp or Google Maps link into the library. Sets the restaurant name if it's empty, and fills an empty ad with the first dishes. Returns the dishes added. If source is \"demo\", the real menu couldn't be read and generic sample dishes were loaded instead: tell the user plainly that these are placeholders, not the restaurant's actual menu, and suggest uploading their own dish photos.",
     input_schema: { type: "object", properties: { url: { type: "string" } }, required: ["url"], additionalProperties: false },
   },
   {
@@ -504,7 +504,11 @@ async function runBasic(ws: Workspace, history: ChatTurn[], attachments: Attachm
   if (link) {
     try {
       const r = await ws.importMenu(link);
-      notes.push(`Imported ${r.added.length} dishes from ${r.restaurant}.`);
+      notes.push(
+        r.source === "demo"
+          ? `I couldn't read ${r.restaurant}'s menu from that link, so I loaded ${r.added.length} sample dishes (not their real menu). Upload your own dish photos to use the real ones.`
+          : `Imported ${r.added.length} dishes from ${r.restaurant}.`,
+      );
     } catch (err) {
       notes.push(err instanceof MenuImportError ? err.message : "I couldn't import that link.");
     }

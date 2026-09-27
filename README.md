@@ -41,6 +41,12 @@ The cooking and diner shots are on by default whenever a video key is set. The c
 - `lib/menu-import.ts` – Yelp / Google Maps menu import
 - `lib/providers/video.ts`, `lib/providers/stock.ts`, `lib/providers/voice.ts` – API wrappers
 - `app/api/assistant` – chat turn; `app/api/generate` – render (streams NDJSON progress); `app/api/video/[id]` – serves the MP4 with Range support
-- `app/page.tsx` + `app/_components/` – the studio UI
+- `lib/projects.ts` – saved projects (autosaved by the studio) and dashboard summaries; `app/api/projects` serves them
+- `lib/publish.ts` + `lib/platforms.ts` – OAuth sign-in and uploads for YouTube, Instagram (Reels), TikTok and Facebook Pages; `app/api/connect` and `app/api/publish`
+- `app/page.tsx` – the projects dashboard; `app/studio/[id]` + `app/_components/` – the studio UI
 
-Rendered videos are written to `$TMPDIR/plate-studio/<jobId>/final_video.mp4`.
+Rendered videos are written to `$TMPDIR/plate-studio/<jobId>/final_video.mp4`. Projects are saved under `.data/` (git-ignored): `.data/projects/<id>/` holds the project and its thumbnail, and `.data/videos/<jobId>.mp4` keeps each project's latest render after `$TMPDIR` is cleaned.
+
+## Publishing
+
+**Export** opens a dialog to download the MP4 or publish it to YouTube, Instagram, TikTok and Facebook in one click, with an editable title, caption and visibility. Each platform turns on once its app keys are in `.env.local` (see `.env.example`); **Connect** signs in through a popup, and the tokens are kept in an httpOnly cookie in that browser. Platforms without keys get **Upload manually**, which downloads the video, copies the caption and opens the platform's upload page. Published links appear on the dashboard.
