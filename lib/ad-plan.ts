@@ -96,7 +96,7 @@ export interface ResolvedScene {
 // Timing constants
 // ---------------------------------------------------------------------------
 
-export const TARGET_DURATION = 30;
+export const TARGET_DURATION = 15;
 export const TRANSITION_SECONDS = 0.6;
 export const VOICE_LEAD = 0.35;
 export const MAX_AD_DISHES = 6;
@@ -339,6 +339,9 @@ export function sanitizeLibrary(raw: unknown, maxImageChars: number): LibraryDis
     return [{ id, title: str(d.title, 80) ?? "", price: str(d.price, 20) ?? "", description: str(d.description, 400) ?? "", imageUrl, uploaded: d.uploaded === true }];
   });
 }
+
+/** Everything that affects the rendered video, for detecting edits a render doesn't include. */
+export const editKey = (p: AdProject, lib: LibraryDish[]) => JSON.stringify([p, lib.map((d) => [d.id, d.title, d.price, d.description, d.imageUrl.length])]);
 
 // ---------------------------------------------------------------------------
 // YouTube copy
