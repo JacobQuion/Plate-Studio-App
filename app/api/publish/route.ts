@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { isPlatform, PLATFORM_INFO, type Privacy } from "@/lib/platforms";
-import { isProjectId, recordPublish, videoPath } from "@/lib/projects";
+import { isProjectId, recordPublish, videoFile } from "@/lib/projects";
 import { connectionCookie, cookieOptions, decodeConnection, encodeConnection, freshConnection, platformConfigured, publishVideo } from "@/lib/publish";
 
 export const runtime = "nodejs";
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   const jar = await cookies();
   const saved = decodeConnection(jar.get(connectionCookie(platform))?.value);
   if (!saved) return Response.json({ error: `Connect ${label} first.`, reconnect: true }, { status: 401 });
-  const file = await videoPath(jobId);
+  const file = await videoFile(jobId);
   if (!file) return Response.json({ error: "That video isn't on the server anymore. Render it again." }, { status: 404 });
 
   const privacy: Privacy = body.privacy === "private" || body.privacy === "unlisted" ? body.privacy : "public";

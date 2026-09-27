@@ -7,8 +7,7 @@ import { stepLabel, useRenderProgress } from "./useRenderProgress";
 /**
  * Shown over the preview while the ad renders: the dish photo "develops" from a blurred,
  * washed-out frame into full color behind a glowing edge that sweeps across with progress,
- * steam rising off the plate, the percentage counting up in the center, and the scene
- * being rendered at the bottom.
+ * steam rising off the plate, and the scene being rendered in the center.
  */
 export function RenderingOverlay({ gen, imageUrl }: { gen: Extract<GenState, { phase: "running" }>; imageUrl: string | null }) {
   const progress = useRenderProgress(gen);
@@ -60,25 +59,20 @@ export function RenderingOverlay({ gen, imageUrl }: { gen: Extract<GenState, { p
       {/* Vignette so the text reads over any photo. */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-transparent to-black/60" />
 
-      {/* Percentage in the center, counting up. */}
-      <div className="absolute inset-0 flex items-center justify-center">
+      {/* The step in progress in the center: the scene being rendered, or the prep step before that. */}
+      <div className="absolute inset-0 flex items-center justify-center px-8">
         <span
-          className="flex items-baseline font-sans leading-none font-semibold tracking-tight text-white tabular-nums"
-          style={{ fontSize: "max(3rem, 13cqw)" }}
+          className="text-center font-sans leading-tight font-semibold tracking-tight text-white tabular-nums [text-shadow:0_2px_16px_rgba(0,0,0,0.6)]"
+          style={{ fontSize: "max(1.5rem, 6cqw)" }}
         >
-          {Math.floor(pct)}%
+          {stepLabel(gen)}
         </span>
-      </div>
-
-      {/* The scene being rendered. */}
-      <div className="absolute inset-x-0 bottom-0 flex justify-center px-14 pb-5">
-        <span className="text-sm font-semibold tracking-wide text-white [text-shadow:0_1px_8px_rgba(0,0,0,0.8)] sm:text-base">{stepLabel(gen)}</span>
       </div>
     </div>
   );
 }
 
-/** Eases a displayed number toward `target` every frame, so the percentage counts up smoothly. */
+/** Eases a number toward `target` every frame, so the reveal edge glides instead of jumping. */
 function useCountUp(target: number): number {
   const [value, setValue] = useState(0);
   useEffect(() => {

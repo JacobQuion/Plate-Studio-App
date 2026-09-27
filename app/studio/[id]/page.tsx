@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getProject, isProjectId, videoPath } from "@/lib/projects";
+import { getProject, hasVideo, isProjectId } from "@/lib/projects";
 import { Studio } from "./Studio";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,6 @@ export default async function StudioPage({ params, searchParams }: Props) {
   if (!isProjectId(id)) notFound();
   const record = await getProject(id);
   // Drop a render whose video file is gone, so the studio offers to render again.
-  if (record?.render && !(await videoPath(record.render.jobId))) delete record.render;
+  if (record?.render && !(await hasVideo(record.render.jobId))) delete record.render;
   return <Studio key={id} id={id} initial={record} template={record || typeof template !== "string" ? undefined : template} />;
 }

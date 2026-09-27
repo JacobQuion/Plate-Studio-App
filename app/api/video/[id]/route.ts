@@ -1,7 +1,8 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
-import { videoPath } from "@/lib/projects";
+import { getDownloadUrl } from "@vercel/blob";
+import { videoSource } from "@/lib/projects";
 
 export const runtime = "nodejs";
 
@@ -10,16 +11,19 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
  * GET /api/video/:id[?download=1]
  * Streams a rendered final_video.mp4 (or its saved copy once $TMPDIR is cleaned) with HTTP Range support (Safari/iOS need it to play video).
+ * A copy saved in Vercel Blob is a redirect to it instead: the Blob CDN handles Range requests and big files.
  */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!UUID.test(id)) return new Response("Not found", { status: 404 });
 
-  const file = await videoPath(id);
+  const source = await videoSource(id);
+  const download = new URL(req.url).searchParams.has("download");
+  if (source && "url" in source) return Response.redirect(download ? getDownloadUrl(source.url) : source.url, 302);
+  const file = source?.file;
   const info = file ? await stat(file).catch(() => null) : null;
   if (!file || !info) return new Response("Not found", { status: 404 });
 
-  const download = new URL(req.url).searchParams.has("download");
   const headers: Record<string, string> = {
     "Content-Type": "video/mp4",
     "Accept-Ranges": "bytes",

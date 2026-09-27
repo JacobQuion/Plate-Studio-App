@@ -1,5 +1,5 @@
 import { sanitizeLibrary, sanitizeProject, type AdProject, type LibraryDish } from "@/lib/ad-plan";
-import { attachRender, isProjectId } from "@/lib/projects";
+import { attachRender, isProjectId, saveVideo } from "@/lib/projects";
 import { generateAd } from "@/lib/video-pipeline";
 import type { GenerateStreamEvent } from "@/lib/types";
 
@@ -13,7 +13,8 @@ export const maxDuration = 300; // Vercel Hobby's ceiling; Pro allows up to 800.
  * Library images are public http(s) URLs or base64 image data URIs (uploads).
  * Renders the ad and streams progress back as NDJSON (one GenerateStreamEvent
  * per line). The final line is either { type: "done", videoUrl, ... } or { type: "error" }.
- * With a projectId, the finished video is saved to that project for the dashboard.
+ * The finished video is saved to storage before "done" goes out, so /api/video can serve it from
+ * any instance; with a projectId, it's also recorded on that project for the dashboard.
  */
 export async function POST(req: Request) {
   let project: AdProject;
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
       const startedAt = Date.now();
       try {
         const result = await generateAd(project, library, send);
+        await saveVideo(result.jobId);
         if (projectId) {
           const { jobId, durationSeconds, timeline, layout, script, providers } = result;
           await attachRender(projectId, { jobId, durationSeconds, timeline, layout, script, providers, editKey, elapsed: (Date.now() - startedAt) / 1000 }, { project, library }).catch((err) =>
