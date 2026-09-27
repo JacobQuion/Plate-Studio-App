@@ -1,10 +1,11 @@
 "use client";
 
-import { ImagePlus, MapPin, LoaderCircle, Maximize2, Minimize2, Sparkles } from "lucide-react";
+import { ImagePlus, MapPin, Maximize2, Minimize2, Sparkles } from "lucide-react";
 import { forwardRef, useEffect, useRef, useState } from "react";
 import type { ResolvedScene } from "@/lib/ad-plan";
 import type { GenerateDoneEvent } from "@/lib/types";
-import { cx } from "./shared";
+import { RenderingOverlay } from "./RenderingOverlay";
+import { cx, type GenState } from "./shared";
 
 /**
  * The 16:9 preview. Two modes:
@@ -18,6 +19,7 @@ export const Preview = forwardRef<
   {
     scene: ResolvedScene | null;
     rendering: boolean;
+    gen: GenState;
     result: GenerateDoneEvent | null;
     showVideo: boolean;
     busy: boolean;
@@ -25,9 +27,11 @@ export const Preview = forwardRef<
     onTime: (t: number) => void;
     onAddFiles: (files: File[]) => void;
     onLink: () => void;
-    onSample: () => void;
+    /** Sample projects offered on the empty stage. */
+    samples: { id: string; label: string }[];
+    onSample: (id: string) => void;
   }
->(function Preview({ scene, rendering, result, showVideo, busy, onVideoClick, onTime, onAddFiles, onLink, onSample }, videoRef) {
+>(function Preview({ scene, rendering, gen, result, showVideo, busy, onVideoClick, onTime, onAddFiles, onLink, samples, onSample }, videoRef) {
   const videoMode = !!result && showVideo && !rendering;
   const fileInput = useRef<HTMLInputElement>(null);
   const stage = useRef<HTMLDivElement>(null);
@@ -62,7 +66,7 @@ export const Preview = forwardRef<
             className="absolute inset-0 size-full bg-black object-contain"
           />
         ) : scene ? (
-          <SceneFrame scene={scene} rendering={rendering} />
+          <SceneFrame scene={scene} />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-zinc-900 to-black p-6 text-center">
             <div>
@@ -81,18 +85,31 @@ export const Preview = forwardRef<
               }}
             />
             <div className="flex flex-wrap justify-center gap-2">
-              <button onClick={() => fileInput.current?.click()} className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200">
-                <ImagePlus className="size-4" /> Upload dish photos
-              </button>
               <button onClick={onLink} className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200">
                 <MapPin className="size-4" /> Yelp/Google Maps
               </button>
+              <button onClick={() => fileInput.current?.click()} className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200">
+                <ImagePlus className="size-4" /> Upload dish photos
+              </button>
             </div>
-            <button onClick={onSample} disabled={busy} className="inline-flex items-center gap-1.5 text-sm text-zinc-500 transition hover:text-brand-400 disabled:opacity-40">
-              <Sparkles className="size-3.5" /> Try sample.
-            </button>
+            <div className="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
+              <span className="mr-0.5 inline-flex items-center gap-1.5 text-sm text-zinc-500">
+                <Sparkles className="size-3.5" /> Try a sample:
+              </span>
+              {samples.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => onSample(s.id)}
+                  disabled={busy}
+                  className="h-7 rounded-full px-2.5 text-[13px] text-zinc-400 ring-1 ring-white/10 transition hover:bg-white/[0.06] hover:text-white disabled:opacity-40"
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
+        {gen.phase === "running" && <RenderingOverlay gen={gen} imageUrl={scene?.imageUrl || null} />}
         {/* The video's own controls already have a fullscreen button in this corner. */}
         {!videoMode && (
           <button
@@ -113,7 +130,7 @@ export const Preview = forwardRef<
 // HTML mock of one scene (sizes mirror lib/overlays.ts at 1920px = 100cqw)
 // ---------------------------------------------------------------------------
 
-function SceneFrame({ scene, rendering }: { scene: ResolvedScene; rendering: boolean }) {
+function SceneFrame({ scene }: { scene: ResolvedScene }) {
   const img = scene.imageUrl;
 
   return (
@@ -124,7 +141,7 @@ function SceneFrame({ scene, rendering }: { scene: ResolvedScene; rendering: boo
           src={img}
           alt=""
           referrerPolicy="no-referrer"
-          className={cx("absolute inset-0 size-full object-cover", scene.kind === "outro" && "scale-110 blur-xl", rendering && "animate-kenburns")}
+          className={cx("absolute inset-0 size-full object-cover", scene.kind === "outro" && "scale-110 blur-xl")}
         />
       )}
 
@@ -144,27 +161,6 @@ function SceneFrame({ scene, rendering }: { scene: ResolvedScene; rendering: boo
         </div>
       )}
 
-      {scene.kind === "dish" && (
-        <>
-          <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-transparent to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
-          <div className="absolute left-[5.7cqw] max-w-[62%]" style={{ bottom: "16.7%" }}>
-            <div className="block">
-              <span className="line-clamp-2 block leading-[1.02] font-black tracking-tight text-white uppercase" style={{ fontSize: scene.headline.length > 34 ? "4.4cqw" : scene.headline.length > 20 ? "5.2cqw" : "6.1cqw" }}>
-                {scene.headline}
-              </span>
-            </div>
-          </div>
-          <div className="absolute left-[5.7cqw] max-w-[55%]" style={{ top: `${(930 / 1080) * 100}%` }}>
-            <div className="block border-l-[0.3cqw] border-orange-500 pl-[1.4cqw]">
-              <span className="line-clamp-2 block leading-snug text-zinc-100" style={{ fontSize: "2.1cqw" }}>
-                {scene.subline || <span className="text-white/40">+ tagline</span>}
-              </span>
-            </div>
-          </div>
-        </>
-      )}
-
       {scene.kind === "outro" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-[3cqw] bg-black/50 text-center">
           <div className="max-w-[80%] px-2 text-center">
@@ -182,14 +178,6 @@ function SceneFrame({ scene, rendering }: { scene: ResolvedScene; rendering: boo
               {scene.subline || <span className="text-white/40">+ website</span>}
             </span>
           </div>
-        </div>
-      )}
-
-      {rendering && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-          <span className="inline-flex items-center gap-2 rounded-full bg-black/70 px-3.5 py-2 text-xs font-medium text-white ring-1 ring-white/15 backdrop-blur-md">
-            <LoaderCircle className="accent-text size-3.5 animate-spin text-brand-500" /> Rendering your ad
-          </span>
         </div>
       )}
     </div>
