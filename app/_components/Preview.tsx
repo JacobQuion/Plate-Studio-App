@@ -1,6 +1,6 @@
 "use client";
 
-import { ImagePlus, Loader2, MapPin, Maximize2, Minimize2, Sparkles, Square, Volume2 } from "lucide-react";
+import { ImagePlus, MapPin, Maximize2, Minimize2, Sparkles } from "lucide-react";
 import { forwardRef, useEffect, useRef, useState } from "react";
 import type { ResolvedScene } from "@/lib/ad-plan";
 import type { GenerateDoneEvent } from "@/lib/types";
@@ -11,8 +11,7 @@ import { cx, type GenState } from "./shared";
  * The 16:9 preview. Two modes:
  *   - video: the last render
  *   - frame: an HTML mock of the selected scene, used before the first render and
- *            whenever there are edits the video doesn't show yet. It can play the
- *            scene's voiceover line (recorded on demand by /api/voice-preview).
+ *            whenever there are edits the video doesn't show yet
  */
 
 /** Seconds into the render to show before playback: past the fade-in, with the intro title up. */
@@ -134,7 +133,6 @@ export const Preview = forwardRef<
             </div>
           </div>
         )}
-        {!videoMode && scene?.voice.trim() && gen.phase !== "running" && <VoiceButton text={scene.voice.trim()} />}
         {gen.phase === "running" && <RenderingOverlay gen={gen} imageUrl={scene?.imageUrl || null} />}
         {/* The video's own controls already have a fullscreen button in this corner. */}
         {!videoMode && (
@@ -151,84 +149,6 @@ export const Preview = forwardRef<
     </div>
   );
 });
-
-// ---------------------------------------------------------------------------
-// Voiceover preview for the HTML mock
-// ---------------------------------------------------------------------------
-
-/** Recorded lines by text, so replaying a scene doesn't record it again. */
-const voiceClips = new Map<string, Promise<string>>();
-
-function voiceClip(text: string): Promise<string> {
-  let clip = voiceClips.get(text);
-  if (!clip) {
-    clip = fetch("/api/voice-preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    }).then(async (res) => {
-      if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error || "Couldn't play the voiceover");
-      return URL.createObjectURL(await res.blob());
-    });
-    clip.catch(() => voiceClips.delete(text));
-    voiceClips.set(text, clip);
-  }
-  return clip;
-}
-
-function VoiceButton({ text }: { text: string }) {
-  const [state, setState] = useState<"idle" | "loading" | "playing">("idle");
-  const [error, setError] = useState<string | null>(null);
-  const audio = useRef<HTMLAudioElement | null>(null);
-  const request = useRef(0);
-
-  const stop = () => {
-    request.current++;
-    audio.current?.pause();
-    audio.current = null;
-    setState("idle");
-  };
-  // Stop when the scene (or its line) changes, and on unmount.
-  useEffect(() => {
-    setError(null);
-    return stop;
-  }, [text]);
-
-  const play = async () => {
-    const id = ++request.current;
-    setError(null);
-    setState("loading");
-    try {
-      const url = await voiceClip(text);
-      if (id !== request.current) return;
-      const a = new Audio(url);
-      a.onended = () => id === request.current && setState("idle");
-      audio.current = a;
-      await a.play();
-      setState("playing");
-    } catch (err) {
-      if (id !== request.current) return;
-      setError((err as Error).message);
-      setState("idle");
-    }
-  };
-
-  const label = state === "idle" ? "Play voiceover" : "Stop voiceover";
-  return (
-    <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2">
-      <button
-        onClick={() => (state === "idle" ? void play() : stop())}
-        aria-label={label}
-        title={label}
-        className="flex h-9 items-center gap-1.5 rounded-lg bg-black/50 px-2.5 text-sm text-white/80 ring-1 ring-white/15 backdrop-blur-md transition hover:bg-black/70 hover:text-white"
-      >
-        {state === "loading" ? <Loader2 className="size-4 animate-spin" /> : state === "playing" ? <Square className="size-3.5 fill-current" /> : <Volume2 className="size-4" />}
-        <span>{state === "playing" ? "Stop" : "Voiceover"}</span>
-      </button>
-      {error && <span className="rounded-md bg-black/60 px-2 py-1 text-xs text-rose-300">{error}</span>}
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // HTML mock of one scene (sizes mirror lib/overlays.ts at 1920px = 100cqw)
