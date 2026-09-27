@@ -1,7 +1,8 @@
 import { editKey, newProject, setAdDishes } from "@/lib/ad-plan";
 import { DEMOS, demoProjectId, type DemoRestaurant } from "@/lib/demo-menus";
-import { attachRender, getProject, hasVideo, saveProject, saveVideo } from "@/lib/projects";
+import { attachRender, getProject, saveProject, saveVideo } from "@/lib/projects";
 import { deleteObject, putObject, readObject } from "@/lib/storage";
+import { cloudVoiceConfigured } from "@/lib/providers/voice";
 import { generateAd } from "@/lib/video-pipeline";
 
 /**
@@ -15,6 +16,8 @@ import { generateAd } from "@/lib/video-pipeline";
 const STALE_MS = 330_000;
 /** A failed render is retried after this long. */
 const RETRY_MS = 120_000;
+/** A render that came out without a voice is redone after this long. */
+const SILENT_RETRY_MS = 600_000;
 
 type Mark = { startedAt: number; error?: string; failedAt?: number };
 export type DemoStatus = { status: "ready" } | { status: "queued" } | { status: "rendering"; startedAt: number } | { status: "failed"; error: string };
@@ -46,9 +49,11 @@ export function demoContent(demo: DemoRestaurant) {
 async function currentStatus(demo: DemoRestaurant): Promise<DemoStatus | { status: "idle" }> {
   // Trust the record's render: checking the video exists too would cost another storage call per poll.
   const record = await getProject(demoProjectId(demo.id));
-  if (record?.render) return { status: "ready" };
-  const mark = await readMark(demo.id);
   const now = Date.now();
+  // A render without a voice (the voice API was out of quota) is redone once a voice may work again.
+  const retryVoice = record?.render?.providers.voice === "silent" && cloudVoiceConfigured() && now - record.render.renderedAt > SILENT_RETRY_MS;
+  if (record?.render && !retryVoice) return { status: "ready" };
+  const mark = await readMark(demo.id);
   if (mark?.error && mark.failedAt && now - mark.failedAt < RETRY_MS) return { status: "failed", error: mark.error };
   if (mark && !mark.error && now - mark.startedAt < STALE_MS) return { status: "rendering", startedAt: mark.startedAt };
   return { status: "idle" };
