@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["ffmpeg-static", "sharp"],
   // Text overlays are rasterized with these fonts; Vercel has no system fonts.
   outputFileTracingIncludes: {
+    "/api/generate": ["./assets/fonts/**/*"],
     "/api/**/*": ["./assets/fonts/**/*"],
   },
 };
