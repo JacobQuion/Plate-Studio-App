@@ -1,7 +1,7 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
-import { jobOutputPath } from "@/lib/video-pipeline";
+import { videoPath } from "@/lib/projects";
 
 export const runtime = "nodejs";
 
@@ -9,15 +9,15 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * GET /api/video/:id[?download=1]
- * Streams a rendered final_video.mp4 with HTTP Range support (Safari/iOS need it to play video).
+ * Streams a rendered final_video.mp4 (or its saved copy once $TMPDIR is cleaned) with HTTP Range support (Safari/iOS need it to play video).
  */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!UUID.test(id)) return new Response("Not found", { status: 404 });
 
-  const file = jobOutputPath(id);
-  const info = await stat(file).catch(() => null);
-  if (!info) return new Response("Not found", { status: 404 });
+  const file = await videoPath(id);
+  const info = file ? await stat(file).catch(() => null) : null;
+  if (!file || !info) return new Response("Not found", { status: 404 });
 
   const download = new URL(req.url).searchParams.has("download");
   const headers: Record<string, string> = {
