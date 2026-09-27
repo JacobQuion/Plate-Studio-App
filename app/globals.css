@@ -15,6 +15,9 @@
   --color-brand-900: #1b2270;
   --animate-kenburns: kenburns 14s ease-in-out infinite alternate;
   --animate-scan-x: scan-x 2.4s ease-in-out infinite;
+  --animate-steam: steam 7s ease-in infinite;
+  --animate-glow: glow 2.4s ease-in-out infinite;
+  --animate-fade-in: fade-in 0.6s ease-out;
 
   @keyframes kenburns {
     from { transform: scale(1.02) translateY(0); }
@@ -23,6 +26,18 @@
   @keyframes scan-x {
     0% { transform: translateX(-100%); }
     100% { transform: translateX(500%); }
+  }
+  @keyframes glow {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+  }
+  @keyframes steam {
+    0% { transform: translate(-50%, 30%) scale(0.6); opacity: 0; }
+    30% { opacity: 0.6; }
+    100% { transform: translate(-50%, -170%) scale(1.8); opacity: 0; }
   }
 }
 
