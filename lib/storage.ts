@@ -2,6 +2,7 @@ import { del, list, put } from "@vercel/blob";
 import { randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 
@@ -21,7 +22,9 @@ if (process.env.VERCEL && !useBlob) {
   console.warn("[storage] BLOB_READ_WRITE_TOKEN isn't set: projects and videos won't persist between requests on Vercel.");
 }
 
-export const DATA_ROOT = process.env.PLATE_STUDIO_DATA_DIR || path.join(/*turbopackIgnore: true*/ process.cwd(), ".data");
+// On Vercel the app folder is read-only; $TMPDIR is the only writable place (and doesn't persist).
+export const DATA_ROOT =
+  process.env.PLATE_STUDIO_DATA_DIR || (process.env.VERCEL ? path.join(os.tmpdir(), "plate-studio-data") : path.join(/*turbopackIgnore: true*/ process.cwd(), ".data"));
 const localPath = (key: string) => path.join(DATA_ROOT, key);
 
 /** "projects/x/project.json" → ["projects/x/project.", ".json"]: every version's name starts with the first half. */
