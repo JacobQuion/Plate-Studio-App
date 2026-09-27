@@ -8,7 +8,7 @@ import { probeDuration, runFfmpeg } from "@/lib/ffmpeg";
 import { TRANSITION_SECONDS as TRANSITION, VOICE_LEAD, planTimeline, resolveScenes, type AdProject, type CameraStyle, type LibraryDish, type ResolvedScene } from "@/lib/ad-plan";
 import { renderMusicBed } from "@/lib/music";
 import { VIDEO_HEIGHT, VIDEO_WIDTH, renderDishOverlays, renderIntroOverlay, renderOutroOverlay, type FrameBoxes } from "@/lib/overlays";
-import { buildMotionPrompt, configuredVideoProvider, generateMotionClip } from "@/lib/providers/video";
+import { dishMotionInput, configuredVideoProvider, generateMotionClip } from "@/lib/providers/video";
 import { fetchStockClip, stockConfigured } from "@/lib/providers/stock";
 import { bitePrompt, cheersPrompt, firePrompt, kitchenPrompt, menuSetting, platingPrompt, servingPrompt, socializingPrompt, stockQueries, type ShotKind, type StockQuery } from "@/lib/shots";
 import { generateVoiceover, voiceConfigured } from "@/lib/providers/voice";
@@ -37,7 +37,8 @@ import type { ProgressEvent, SceneTiming, StageId, StageStatus, VideoProvider, V
  *
  * What goes on screen and in the voiceover comes from the ad project
  * (lib/ad-plan.ts); scene lengths come from planTimeline() using the real
- * voiceover durations. Every external call has a local fallback.
+ * voiceover durations. Generated dish heroes must succeed; uploaded photos and
+ * lifestyle shots retain their local fallbacks.
  */
 
 export interface AdResult {
@@ -88,10 +89,13 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: nu
 }
 
 export async function generateAd(project: AdProject, library: LibraryDish[], onProgress: ProgressCallback = () => {}): Promise<AdResult> {
-  const emit = (stage: StageId, status: StageStatus, detail?: string) => onProgress({ type: "progress", stage, status, detail });
+  const emit = (stage: StageId, status: StageStatus, detail?: string, progress?: number) => onProgress({ type: "progress", stage, status, detail, progress });
   const scenes = resolveScenes(project, library);
   const dishes = scenes.filter((s) => s.kind === "dish");
   if (!dishes.length) throw new Error("Add at least one dish to the ad");
+  const dishFor = (scene: ResolvedScene) => library.find((d) => d.id === scene.dishId)!;
+  const generated = dishes.filter((d) => dishFor(d).visualMode === "generate");
+  if (generated.length && !configuredVideoProvider()) throw new Error("Original AI footage needs a video API key. Add GEMINI_API_KEY, LUMA_API_KEY, or REPLICATE_API_TOKEN in server settings, then Render again. Your restaurant details are saved.");
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : w.endsWith("h") ? "es" : "s"}`;
 
   const jobId = randomUUID();
@@ -101,10 +105,11 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
   // -------------------------------------------------------------------------
   // 1. Assets: photos cropped to 16:9, text layers rendered
   // -------------------------------------------------------------------------
-  emit("assets", "active", `Preparing ${plural(dishes.length, "photo")}`);
+  emit("assets", "active", `Preparing ${plural(dishes.length, "dish")} and their scene references`, 0);
   // Validate duplicates before making any paid motion or voice requests.
-  const images = await prepareDishImages(dishes);
-  const stills = new Map(dishes.map((d) => [d.id, path.join(dir, `still_${d.id}.jpg`)]));
+  const photoDishes = dishes.filter((d) => dishFor(d).visualMode !== "generate");
+  const images = await prepareDishImages(photoDishes);
+  const stills = new Map(photoDishes.map((d) => [d.id, path.join(dir, `still_${d.id}.jpg`)]));
   const fallbackStills: Partial<Record<keyof typeof LIFESTYLE_IMAGES, string>> = {};
   if (project.lifestyle) {
     for (const [name, url] of Object.entries(LIFESTYLE_IMAGES)) {
@@ -115,7 +120,7 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
     }
   }
   const [, overlays] = await Promise.all([
-    Promise.all(dishes.map((d) => writeFile(stills.get(d.id)!, images.get(d.id)!))),
+    Promise.all(photoDishes.map((d) => writeFile(stills.get(d.id)!, images.get(d.id)!))),
     Promise.all(
       scenes.map(async (s): Promise<{ files: string[]; boxes: FrameBoxes }> => {
         if (s.kind === "intro") {
@@ -131,7 +136,7 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
       }),
     ),
   ]);
-  emit("assets", "done", `${plural(dishes.length, "photo")} cropped to 16:9, titles rendered`);
+  emit("assets", "done", `References and titles ready for ${plural(dishes.length, "dish")}`, 1);
 
   // -------------------------------------------------------------------------
   // 2 + 3. Motion clips and voiceover lines in parallel
@@ -140,12 +145,12 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
     const clips = new Map<string, Clip>();
     const provider = configuredVideoProvider();
     const stock = stockConfigured();
-    // One job per shot: every dish photo animated by the AI (it has to be their dish), plus
-    // (optionally) the cooking and eating shots, from the AI or else from stock footage.
+    // Imported dishes use original text-to-video; uploads use image-to-video.
+    // Optional cooking/eating scenes use AI or stock footage.
     const intro = scenes[0];
     const outro = scenes[scenes.length - 1];
     type Job = { sceneId: string; kind: ShotKind; image: string | null; prompt: string; queries: StockQuery[] };
-    const jobs: Job[] = provider ? dishes.map((d) => ({ sceneId: d.id, kind: "hero", image: d.imageUrl, prompt: buildMotionPrompt(d.headline), queries: [] })) : [];
+    const jobs: Job[] = provider ? dishes.map((d) => ({ sceneId: d.id, kind: "hero", ...dishMotionInput(dishFor(d), d.headline), queries: [] })) : [];
     if (project.lifestyle && (provider || stock)) {
       const dish = (d: ResolvedScene) => library.find((x) => x.id === d.dishId);
       // A café menu opens on a barista and ends over coffee; a restaurant on the stove and a shared meal.
@@ -208,8 +213,11 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
         }
       }
       if (accepted) clips.set(clipKey(job.sceneId, job.kind), accepted);
-      emit("motion", "active", `${++finished} of ${plural(jobs.length, "clip")} back${provider ? ` from ${name}` : ""}`);
+      finished++;
+      emit("motion", "active", `Processed ${finished} / ${plural(jobs.length, "clip")}${provider ? ` with ${name}` : ""}`, finished / jobs.length);
     });
+    const missing = generated.filter((d) => !clips.has(clipKey(d.id, "hero")));
+    if (missing.length) throw new Error(`Couldn't generate original footage for ${missing.map((d) => `“${d.headline}”`).join(", ")}. Check the video provider's quota or billing and try Render again.`);
     const fromStock = clips.size - fromAi;
     const summary = [fromAi && `${fromAi} AI`, fromStock && `${fromStock} stock`].filter(Boolean).join(" + ");
     if (clips.size === jobs.length) emit("motion", "done", `${summary} clips ready`);
@@ -219,10 +227,12 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
 
   const voiceTask = (async () => {
     const spoken = scenes.filter((s) => s.voice.trim()).length;
+    let recorded = 0;
     emit("voice", "active", `Recording ${plural(spoken, "line")}${voiceConfigured() ? " with ElevenLabs" : ""}`);
     const clips = await mapLimit(scenes, 2, async (s) => {
       if (!s.voice.trim()) return null;
       const voice = await generateVoiceover(s.voice, dir, undefined, `voice_${s.id}`);
+      emit("voice", "active", "Recording voiceover…", ++recorded / Math.max(1, spoken));
       return voice ? { ...voice, duration: (await probeDuration(voice.path)) ?? 0 } : null;
     });
     const made = clips.filter((c) => c !== null);
@@ -254,10 +264,11 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
     const args = sceneArgs({ scene, duration, shots: shots[i], overlays: files, out: scenePaths[i] });
     await runFfmpeg(args, 240_000);
     rendered++;
-    emit("assemble", "active", rendered < scenes.length ? `Rendering scene ${rendered + 1} of ${scenes.length}` : "Mixing voice and music");
+    emit("assemble", "active", rendered < scenes.length ? "Assembling your scenes…" : "Mixing voice and music", rendered / (scenes.length + 2));
   });
 
   const musicPath = project.music ? await renderMusicBed(path.join(dir, "music.wav"), total) : null;
+  emit("assemble", "active", "Finishing your MP4…", (scenes.length + 1) / (scenes.length + 2));
   const outputPath = jobOutputPath(jobId);
   await runFfmpeg(
     finalMixArgs({

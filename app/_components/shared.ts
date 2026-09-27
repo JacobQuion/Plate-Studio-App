@@ -3,7 +3,7 @@ import type { GenerateDoneEvent, StageId, StageStatus } from "@/lib/types";
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
-export type StageState = { status: StageStatus | "pending"; detail?: string };
+export type StageState = { status: StageStatus | "pending"; detail?: string; progress?: number };
 export type GenState =
   | { phase: "idle" }
   | { phase: "running"; stages: Record<StageId, StageState>; startedAt: number }

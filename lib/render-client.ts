@@ -3,11 +3,11 @@ import type { GenerateStreamEvent } from "@/lib/types";
 
 export function renderKey(project: AdProject, library: LibraryDish[]): string {
   const used = new Set(project.scenes.map((s) => s.dishId));
-  return JSON.stringify([project, library.filter((d) => used.has(d.id)).map((d) => [d.id, d.title, d.price, d.description, d.imageUrl])]);
+  return JSON.stringify([project, library.filter((d) => used.has(d.id)).map((d) => [d.id, d.title, d.price, d.description, d.imageUrl, d.visualMode, d.visualDescription])]);
 }
 
 /** Handle arbitrary chunk boundaries and a final event without a trailing newline. */
-export async function* readRenderEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<GenerateStreamEvent> {
+export async function* readRenderEvents<T = GenerateStreamEvent>(body: ReadableStream<Uint8Array>): AsyncGenerator<T> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -18,9 +18,9 @@ export async function* readRenderEvents(body: ReadableStream<Uint8Array>): Async
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
-      for (const line of lines) if (line.trim()) yield JSON.parse(line) as GenerateStreamEvent;
+      for (const line of lines) if (line.trim()) yield JSON.parse(line) as T;
     }
-    if (buffer.trim()) yield JSON.parse(buffer) as GenerateStreamEvent;
+    if (buffer.trim()) yield JSON.parse(buffer) as T;
   } finally {
     await reader.cancel().catch(() => {});
     reader.releaseLock();

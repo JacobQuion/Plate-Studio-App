@@ -33,7 +33,7 @@ const ADD_ITEMS: ContextItem[] = [
   {
     id: "link",
     label: "Find a restaurant",
-    hint: "Search by name and city",
+    hint: "Start with just an address",
     icon: MapPin,
   },
 ];
@@ -232,11 +232,11 @@ export function ChatPane({
         <div className="accent-ring relative rounded-2xl border border-white/10 bg-white/[0.03] transition focus-within:border-white/20">
           {/* Chips: add sources, then every known dish (tap to put it in the ad or take it out) */}
           <div className="flex gap-1.5 overflow-x-auto px-3 pt-3 [scrollbar-width:none]">
-            <Chip onClick={() => fileInput.current?.click()} disabled={busy}>
-              <ImagePlus className="size-3.5" /> Media
-            </Chip>
             <Chip onClick={onSearch} disabled={busy}>
-              <MapPin className="size-3.5" /> Find restaurant
+              <MapPin className="size-3.5" /> Search address
+            </Chip>
+            <Chip onClick={() => fileInput.current?.click()} disabled={busy}>
+              <ImagePlus className="size-3.5" /> Photos
             </Chip>
             {library.length > 0 && <span className="mx-0.5 w-px shrink-0 self-stretch bg-white/10" />}
             {library.map((d) => {

@@ -17,7 +17,6 @@ import type { GenerateDoneEvent, MenuImportResult } from "@/lib/types";
 import { activateLocation, archiveDish, archiveLocation, emptyWorkspace, restoreDish, restoreLocation, type Workspace } from "@/lib/workspace";
 import { loadWorkspace, saveWorkspace } from "@/lib/local-workspace";
 import { downloadRenderedVideo, readRenderEvents, renderKey } from "@/lib/render-client";
-import type { RestaurantLocation } from "@/lib/locations";
 import { LibraryPanel } from "./_components/LibraryPanel";
 import { LocationSearch } from "./_components/LocationSearch";
 import { ChatPane, type PendingPhoto } from "./_components/ChatPane";
@@ -46,6 +45,7 @@ export default function Studio() {
   const [saveStatus, setSaveStatus] = useState("Loading local workspace…");
   const [panel, setPanel] = useState<"context" | "library">("context");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [importSummary, setImportSummary] = useState<MenuImportResult | null>(null);
   const [uploading, setUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [result, setResult] = useState<GenerateDoneEvent | null>(null);
@@ -157,8 +157,8 @@ export default function Studio() {
     if (renderLock.current || !ready || busy || uploading || exporting) return;
     const used = new Set(dishScenes(project).map((s) => s.dishId));
     const featured = library.filter((d) => used.has(d.id));
-    if (!featured.length) return setToast("Add at least one dish photo before rendering.");
-    if (featured.some((d) => !d.imageUrl)) return setToast("Add a photo for every selected dish before rendering.");
+    if (!featured.length) return setToast("Find a restaurant or add a dish before rendering.");
+    if (featured.some((d) => !d.imageUrl && d.visualMode !== "generate")) return setToast("Add a photo for every uploaded dish before rendering.");
     renderLock.current = true;
     const key = renderKey(project, library);
     const startedAt = Date.now();
@@ -176,7 +176,7 @@ export default function Studio() {
       }
       for await (const event of readRenderEvents(res.body)) {
         if (event.type === "progress") {
-          stages = { ...stages, [event.stage]: { status: event.status, detail: event.detail } };
+          stages = { ...stages, [event.stage]: { status: event.status, detail: event.detail, progress: event.progress } };
           setGen({ phase: "running", stages, startedAt });
         } else if (event.type === "done") {
           setResult(event);
@@ -231,25 +231,20 @@ export default function Studio() {
     snapshots.current.clear();
   };
 
-  const addLocation = async (location: RestaurantLocation) => {
+  const addLocation = (data: MenuImportResult) => {
     if (!ready || busy || running || uploading || exporting) return;
+    const location = data.location;
+    if (!location) return;
     setSearchOpen(false);
     setPanel("library");
-    setWorkspace((w) => activateLocation(w, location));
-    if (location.source === "manual") return;
-    setBusy(true);
-    try {
-      const res = await fetch("/api/scrape-menu", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: location.url }) });
-      const data = await res.json() as MenuImportResult & { error?: string };
-      if (!res.ok) throw new Error(data.error || "Menu import failed.");
-      const dishes: LibraryDish[] = data.dishes.map((d) => ({ ...d, id: `${location.id}:${d.id}`, locationId: location.id }));
-      setWorkspace((w) => {
-        const added = dishes.filter((d) => !w.library.some((x) => x.id === d.id));
-        return { ...w, library: [...w.library, ...added], project: setAdDishes(w.project, [...dishScenes(w.project).map((s) => s.dishId!), ...added.map((d) => d.id)]) };
-      });
-      setToast(dishes.length ? `Added ${dishes.length} dish photos from ${location.name}.` : "Location saved. Upload your dish photos to get started.");
-    } catch { setToast("Location saved. Menu photos couldn't be imported; upload your own photos."); }
-    finally { setBusy(false); }
+    setImportSummary(data);
+    const dishes: LibraryDish[] = data.dishes.map((d) => ({ ...d, id: `${location.id}:${d.id}`, locationId: location.id }));
+    setWorkspace((w) => {
+      const next = activateLocation(w, location);
+      const ids = new Set(dishes.map((d) => d.id));
+      return { ...next, library: [...next.library.filter((d) => !ids.has(d.id)), ...dishes], project: setAdDishes(next.project, dishes.map((d) => d.id)) };
+    });
+    setToast(`${dishes.length} dishes ready. Click Render to generate original footage.`);
   };
 
   const undo = (messageId: string) => {
@@ -492,19 +487,19 @@ export default function Studio() {
                 label="About adding context"
                 items={[
                   { title: "Upload media", text: "Click Media or drag dish photos onto this panel to add them to your ad." },
-                  { title: "Yelp / Google Maps", text: "Search by restaurant name and city, then save the location and add your dish photos." },
+                  { title: "Restaurant address", text: "Find a restaurant by address. We collect menu details and food references to generate original scenes." },
                 ]}
               />
             </span>
           </div>
           <div className="flex shrink-0 gap-2 px-4 pt-3">
             <button onClick={() => setPanel("context")} className={`rounded-lg px-3 py-2 text-sm ${panel === "context" ? "bg-white/10 text-white" : "text-zinc-500"}`}>Assistant</button>
-            <button onClick={() => setPanel("library")} className={`rounded-lg px-3 py-2 text-sm ${panel === "library" ? "bg-white/10 text-white" : "text-zinc-500"}`}>Dishes, locations & history</button>
+            <button onClick={() => setPanel("library")} className={`rounded-lg px-3 py-2 text-sm ${panel === "library" ? "bg-white/10 text-white" : "text-zinc-500"}`}>Restaurant & dishes</button>
           </div>
           {panel === "context" ? <ChatPane
             messages={messages} busy={editing} pending={pending} onSearch={() => setSearchOpen(true)} library={library} inAd={dishIds} dishesDisabled={editing}
             onToggleDish={toggleDish} onAddFiles={addFiles} onRemovePending={removeDish} onSend={send} onUndo={undo}
-          /> : <LibraryPanel workspace={workspace} disabled={editing} onSearch={() => setSearchOpen(true)} onAddFiles={addFiles} onToggleDish={toggleDish}
+          /> : <LibraryPanel workspace={workspace} importSummary={importSummary} disabled={editing} onSearch={() => setSearchOpen(true)} onAddFiles={addFiles} onToggleDish={toggleDish}
             onRemoveDish={removeDish} onRestoreDish={(id) => setWorkspace((w) => restoreDish(w, id))}
             onSelectLocation={(id) => { const l = workspace.locations.find((x) => x.id === id); if (l) setWorkspace((w) => activateLocation(w, l)); }}
             onRemoveLocation={(id) => { setWorkspace((w) => archiveLocation(w, id)); snapshots.current.clear(); }}
@@ -559,7 +554,7 @@ export default function Studio() {
         </div>
       </div>
 
-      {searchOpen && <LocationSearch onClose={() => setSearchOpen(false)} onSelect={(l) => void addLocation(l)} />}
+      {searchOpen && <LocationSearch onClose={() => setSearchOpen(false)} onSelect={addLocation} />}
       <AnimatePresence>
         {toast && (
           <motion.div

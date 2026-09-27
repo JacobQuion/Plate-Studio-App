@@ -1,11 +1,12 @@
 import { safeFetch } from "@/lib/safe-fetch";
 import type { Dish, MenuImportResult } from "@/lib/types";
+import { createHash } from "node:crypto";
 
 /**
  * Best-effort menu import from a Google Maps or Yelp URL:
  *   1. schema.org JSON-LD (Restaurant.hasMenu / MenuItem), which many sites embed
  *   2. Yelp's server-rendered /menu/<biz> markup
- *   3. Return an empty menu with a useful message if real dish photos aren't available
+ *   3. Return an empty menu with a useful message if real menu data isn't available
  *
  * Google Maps renders menus client-side, so for Maps links we usually only get
  * the restaurant name (from the URL) and fall through to step 3.
@@ -33,7 +34,7 @@ function isAllowedHost(host: string): boolean {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function decodeEntities(s: string): string {
+export function decodeEntities(s: string): string {
   return s
     .replace(/<[^>]+>/g, "")
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
@@ -153,6 +154,40 @@ function parseYelpMenu(html: string): Dish[] {
   return dishes;
 }
 
+/** Menu text is enough to generate an original scene; a photo is optional. */
+export function parseMenuHtml(html: string, sourceUrl: string): Dish[] {
+  const seen = new Set<string>();
+  return [...parseJsonLd(html), ...parseYelpMenu(html)].flatMap((dish): Dish[] => {
+    const key = dish.title.toLowerCase();
+    if (!key || seen.has(key)) return [];
+    seen.add(key);
+    let imageUrl = "";
+    try {
+      const url = new URL(dish.imageUrl, sourceUrl);
+      if (dish.imageUrl && /^https?:$/.test(url.protocol)) imageUrl = url.toString();
+    } catch {}
+    return [{ ...dish, id: `menu-${createHash("sha256").update(key).digest("hex").slice(0, 16)}`, imageUrl, visualMode: "generate", sourceUrl, evidence: "menu" }];
+  }).slice(0, MAX_DISHES);
+}
+
+/** Bound HTML downloads, including chunked bodies without Content-Length. */
+export async function readPageHtml(res: Response): Promise<string> {
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.length;
+      if (size > 2 * 1024 * 1024) throw new Error("Menu page is too large");
+      chunks.push(value);
+    }
+    return Buffer.concat(chunks).toString("utf8");
+  } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+}
+
 // ---------------------------------------------------------------------------
 // Import
 // ---------------------------------------------------------------------------
@@ -173,11 +208,11 @@ export async function importMenu(raw: string): Promise<MenuImportResult> {
   try {
     const res = await safeFetch(url.toString(), { timeoutMs: 8000, allowHost: isAllowedHost });
     if (res.ok) {
-      const html = await res.text();
+      const html = await readPageHtml(res);
       restaurant = restaurant || nameFromHtml(html);
       // Maps short links redirect to a /maps/place/ URL that contains the name.
       if (!restaurant && res.url) restaurant = nameFromUrl(new URL(res.url));
-      dishes = [...parseJsonLd(html), ...parseYelpMenu(html)];
+      dishes = parseMenuHtml(html, res.url || url.toString());
     } else {
       note = `The page responded with ${res.status}.`;
     }
@@ -185,11 +220,11 @@ export async function importMenu(raw: string): Promise<MenuImportResult> {
     note = `Couldn't reach the page (${(err as Error).message}).`;
   }
 
-  // A video needs a photo, so only dishes with images are usable.
+  // Original footage can be generated from verified menu descriptions alone.
   const seen = new Set<string>();
   const usable = dishes.filter((d) => {
     const key = d.title.toLowerCase();
-    if (!d.imageUrl || !d.title || seen.has(key)) return false;
+    if (!d.title || seen.has(key)) return false;
     seen.add(key);
     return true;
   });
@@ -201,7 +236,7 @@ export async function importMenu(raw: string): Promise<MenuImportResult> {
           restaurant: restaurant || "Restaurant",
           source: "unavailable",
           dishes: [],
-          note: "No usable menu photos were found. Upload your dish photos to create an ad." + (note ? ` ${note}` : ""),
+          note: "No public menu data was found. Try address search to look up the restaurant's details and food photos." + (note ? ` ${note}` : ""),
         };
 
   return result;

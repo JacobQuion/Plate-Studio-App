@@ -343,7 +343,12 @@ export function sanitizeLibrary(raw: unknown, maxImageChars: number): LibraryDis
     if (!id || ids.has(id)) return [];
     if (imageUrl && !/^(https?:\/\/|data:image\/[a-z+.-]+;base64,)/i.test(imageUrl)) return [];
     ids.add(id);
-    return [{ id, title: str(d.title, 80) ?? "", price: str(d.price, 20) ?? "", description: str(d.description, 400) ?? "", imageUrl, uploaded: d.uploaded === true, ...(str(d.locationId, 256) ? { locationId: str(d.locationId, 256) } : {}) }];
+    return [{ id, title: str(d.title, 80) ?? "", price: str(d.price, 20) ?? "", description: str(d.description, 400) ?? "", imageUrl, uploaded: d.uploaded === true,
+      ...(d.visualMode === "generate" ? { visualMode: "generate" as const } : {}),
+      ...(str(d.visualDescription, 800) ? { visualDescription: str(d.visualDescription, 800) } : {}),
+      ...(typeof d.sourceUrl === "string" && /^https?:\/\//i.test(d.sourceUrl) ? { sourceUrl: d.sourceUrl.slice(0, 4096) } : {}),
+      ...(d.evidence === "photo" || d.evidence === "menu" ? { evidence: d.evidence } : {}),
+      ...(str(d.locationId, 256) ? { locationId: str(d.locationId, 256) } : {}) }];
   });
 }
 

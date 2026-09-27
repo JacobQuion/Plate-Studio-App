@@ -7,6 +7,11 @@ export interface Dish {
   price: string;
   description: string;
   imageUrl: string;
+  /** Imported dishes generate original footage; their source photos are references only. */
+  visualMode?: "generate";
+  visualDescription?: string;
+  sourceUrl?: string;
+  evidence?: "menu" | "photo";
 }
 
 export interface MenuImportResult {
@@ -14,11 +19,18 @@ export interface MenuImportResult {
   /** Only real menu data is imported; missing data never inserts sample dishes. */
   source: "live" | "unavailable";
   dishes: Dish[];
-  /** Why menu photos could not be imported, when unavailable. */
+  /** Partial-source failures or food labels that need review. */
   note?: string;
+  location?: import("./locations").RestaurantLocation;
+  searchSuggestions?: string;
 }
 
-/** The four stages shown in the render progress bar. */
+export type ImportStreamEvent =
+  | { type: "progress"; progress: number; detail: string }
+  | { type: "done"; result: MenuImportResult }
+  | { type: "error"; message: string };
+
+/** Work groups contributing to the overall render progress bar. */
 export type StageId = "assets" | "motion" | "voice" | "assemble";
 
 /** "fallback" means the stage finished using a local renderer or alternative provider. */
@@ -29,6 +41,8 @@ export interface ProgressEvent {
   stage: StageId;
   status: StageStatus;
   detail?: string;
+  /** Completed fraction of this stage, based on completed work (0–1). */
+  progress?: number;
 }
 
 export type VideoProvider = "luma" | "replicate" | "gemini" | "stock" | "local-motion";

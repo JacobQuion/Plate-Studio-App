@@ -3,11 +3,13 @@
 import { Check, LoaderCircle, MessageSquare, RotateCcw, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { StageId } from "@/lib/types";
-import { cx, type GenState } from "./shared";
+import { type GenState } from "./shared";
+import { renderProgress } from "@/lib/render-progress";
+import { ProgressBar } from "./ProgressBar";
 
 const STAGES: { id: StageId; label: string }[] = [
-  { id: "assets", label: "Preparing photos" },
-  { id: "motion", label: "Adding motion" },
+  { id: "assets", label: "Preparing scenes" },
+  { id: "motion", label: "Generating footage" },
   { id: "voice", label: "Recording voiceover" },
   { id: "assemble", label: "Putting it together" },
 ];
@@ -35,22 +37,18 @@ export function RenderStatus({
   }, [gen.phase]);
 
   if (gen.phase === "running") {
-    const i = Math.max(0, STAGES.findIndex((s) => gen.stages[s.id].status === "active" || gen.stages[s.id].status === "pending"));
-    const current = STAGES[i] ?? STAGES[STAGES.length - 1];
+    const current = STAGES.find((s) => gen.stages[s.id].status === "active") ?? STAGES.find((s) => gen.stages[s.id].status === "pending") ?? STAGES[STAGES.length - 1];
+    const progress = renderProgress(gen.stages);
     return (
       <Row>
         <span className="flex items-center gap-2 text-zinc-200">
           <LoaderCircle className="accent-text size-4 animate-spin text-brand-500" />
           {current.label}…
           <span className="text-zinc-500">
-            Step {Math.min(i + 1, STAGES.length)} of {STAGES.length} · {((now - gen.startedAt) / 1000).toFixed(0)}s
+            {progress}% · {Math.max(0, Math.floor((now - gen.startedAt) / 1000))}s
           </span>
         </span>
-        <div className="flex gap-1">
-          {STAGES.map((s, n) => (
-            <span key={s.id} className={cx("relative h-1 w-8 rounded-full", n < i ? "accent-fill bg-brand-700" : n === i ? "accent-fill bg-brand-800 opacity-60" : "bg-white/10")} />
-          ))}
-        </div>
+        <div className="w-40"><ProgressBar value={progress} label="Video generation progress" /></div>
       </Row>
     );
   }
@@ -59,7 +57,7 @@ export function RenderStatus({
     return (
       <Row>
         <span className="flex min-w-0 items-center gap-2 text-rose-300">
-          <TriangleAlert className="size-4 shrink-0" /> <span className="truncate">{gen.message}</span>
+          <TriangleAlert className="size-4 shrink-0" /> <span className="max-w-2xl">{gen.message}</span>
         </span>
         <PrimaryButton onClick={onRender} disabled={!canRender}>
           <RotateCcw className="size-3.5" /> Try again
@@ -85,7 +83,7 @@ export function RenderStatus({
     return (
       <Row>
         <span className="flex items-center gap-2 text-zinc-300">
-          <Check className="size-4 text-emerald-400" /> Your video is ready. Ask the assistant to change anything.
+          <Check className="size-4 text-emerald-400" /> 100% · Your video is ready to export.
         </span>
       </Row>
     );

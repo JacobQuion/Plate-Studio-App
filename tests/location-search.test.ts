@@ -13,9 +13,9 @@ test("name-and-city links encode punctuation correctly", () => {
 });
 
 test("no-key lookup uses external search choices without fabricated results", async (t) => {
-  const previous = [process.env.GOOGLE_PLACES_API_KEY, process.env.YELP_API_KEY];
-  delete process.env.GOOGLE_PLACES_API_KEY; delete process.env.YELP_API_KEY;
-  t.after(() => { for (const [i, key] of ["GOOGLE_PLACES_API_KEY", "YELP_API_KEY"].entries()) { if (previous[i]) process.env[key] = previous[i]; else delete process.env[key]; } });
+  const previous = [process.env.GOOGLE_PLACES_API_KEY, process.env.YELP_API_KEY, process.env.GEMINI_API_KEY];
+  delete process.env.GOOGLE_PLACES_API_KEY; delete process.env.YELP_API_KEY; delete process.env.GEMINI_API_KEY;
+  t.after(() => { for (const [i, key] of ["GOOGLE_PLACES_API_KEY", "YELP_API_KEY", "GEMINI_API_KEY"].entries()) { if (previous[i]) process.env[key] = previous[i]; else delete process.env[key]; } });
   t.mock.method(globalThis, "fetch", async () => { throw new Error("No network request expected without keys"); });
   const result = await searchLocations("Pizza", "Berkeley");
   assert.deepEqual(result.locations, []);
@@ -45,5 +45,5 @@ test("a blocked restaurant page never silently imports sample dishes", async (t)
   const menu = await importMenu("https://www.yelp.com/biz/test-restaurant");
   assert.equal(menu.source, "unavailable");
   assert.deepEqual(menu.dishes, []);
-  assert.match(menu.note!, /Upload your dish photos/);
+  assert.match(menu.note!, /Try address search/);
 });

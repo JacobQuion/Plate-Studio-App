@@ -28,7 +28,7 @@ test("preview has no video or mock dish image until a real render exists", () =>
   const props = { gen: { phase: "idle" as const }, result: null, dishCount: 2, busy: false, stale: false, onVideoClick() {}, onTime() {}, onAddFiles() {}, onSearch() {}, onRender() {} };
   const html = renderToStaticMarkup(createElement(Preview, props));
   assert.doesNotMatch(html, /<video|<img/);
-  assert.match(html, /Ready when you are/);
+  assert.match(html, /Your dishes. A fresh take./);
   const loading = renderToStaticMarkup(createElement(Preview, { ...props, gen: { phase: "running", stages: freshStages(), startedAt: 1 } }));
   assert.match(loading, /Generating your video/);
   assert.match(loading, /animate-spin/);
