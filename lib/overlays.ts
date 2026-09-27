@@ -1,5 +1,27 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import sharp from "sharp";
 import type { FrameField } from "@/lib/ad-plan";
+
+/**
+ * sharp draws SVG text with whatever fonts fontconfig can find. Vercel's functions ship
+ * no system fonts (and no fontconfig config), so text came out blank there. Point
+ * fontconfig at the fonts bundled in assets/fonts so every environment renders the same.
+ * This has to run before sharp renders its first text layer.
+ */
+function useBundledFonts() {
+  if (process.env.FONTCONFIG_FILE) return;
+  const fontDir = path.join(process.cwd(), "assets", "fonts");
+  if (!fs.existsSync(fontDir)) return;
+  const conf = path.join(os.tmpdir(), "platestudio-fonts.conf");
+  fs.writeFileSync(
+    conf,
+    `<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig><dir>${fontDir}</dir><cachedir>${path.join(os.tmpdir(), "fontconfig-cache")}</cachedir></fontconfig>`,
+  );
+  process.env.FONTCONFIG_FILE = conf;
+}
+useBundledFonts();
 
 /**
  * Renders the ad's text layers as full-frame transparent PNGs, laid out on a 1920x1080 canvas
@@ -38,7 +60,8 @@ export const RENDER_QUALITY: "full" | "light" =
 export const OUTPUT_WIDTH = RENDER_QUALITY === "light" ? 1280 : VIDEO_WIDTH;
 export const OUTPUT_HEIGHT = RENDER_QUALITY === "light" ? 720 : VIDEO_HEIGHT;
 
-const FONT = `'Helvetica Neue', Helvetica, Arial, sans-serif`;
+/** Bundled in assets/fonts (see useBundledFonts). */
+const FONT = `Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif`;
 const SIDE_PADDING = 110;
 /** Title occupies the left ~60% so the dish stays visible on the right. */
 const MAX_TEXT_WIDTH = 1150;

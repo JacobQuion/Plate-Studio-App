@@ -4,6 +4,10 @@ const nextConfig: NextConfig = {
   // ffmpeg-static resolves its binary path relative to its own package dir,
   // so it must not be bundled. sharp ships native bindings.
   serverExternalPackages: ["ffmpeg-static", "sharp"],
+  // Text overlays are rasterized with these fonts; Vercel has no system fonts.
+  outputFileTracingIncludes: {
+    "/api/**/*": ["./assets/fonts/**/*"],
+  },
 };
 
 export default nextConfig;
