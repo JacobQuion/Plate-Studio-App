@@ -1,23 +1,13 @@
 "use client";
 
-import { Check, LoaderCircle, MessageSquare, RotateCcw, TriangleAlert } from "lucide-react";
-import { useEffect, useState } from "react";
-import type { StageId } from "@/lib/types";
-import { cx, type GenState } from "./shared";
-
-const STAGES: { id: StageId; label: string }[] = [
-  { id: "assets", label: "Preparing photos" },
-  { id: "motion", label: "Adding motion" },
-  { id: "voice", label: "Recording voiceover" },
-  { id: "assemble", label: "Putting it together" },
-];
+import { Check, RotateCcw, TriangleAlert } from "lucide-react";
+import type { GenState } from "./shared";
 
 /** One line under the preview: what's happening with the video, and the one thing to do next. */
 export function RenderStatus({
   gen,
   stale,
   canRender,
-  hasScene,
   showVideo,
   onRender,
   onShowVideo,
@@ -26,38 +16,12 @@ export function RenderStatus({
   /** There are edits the current video doesn't include. */
   stale: boolean;
   canRender: boolean;
-  hasScene: boolean;
   showVideo: boolean;
   onRender: () => void;
   onShowVideo: (show: boolean) => void;
 }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    if (gen.phase !== "running") return;
-    const t = setInterval(() => setNow(Date.now()), 200);
-    return () => clearInterval(t);
-  }, [gen.phase]);
-
-  if (gen.phase === "running") {
-    const i = Math.max(0, STAGES.findIndex((s) => gen.stages[s.id].status === "active" || gen.stages[s.id].status === "pending"));
-    const current = STAGES[i] ?? STAGES[STAGES.length - 1];
-    return (
-      <Row>
-        <span className="flex items-center gap-2 text-zinc-200">
-          <LoaderCircle className="accent-text size-4 animate-spin text-brand-500" />
-          {current.label}…
-          <span className="text-zinc-500">
-            Step {Math.min(i + 1, STAGES.length)} of {STAGES.length} · {((now - gen.startedAt) / 1000).toFixed(0)}s
-          </span>
-        </span>
-        <div className="flex gap-1">
-          {STAGES.map((s, n) => (
-            <span key={s.id} className={cx("relative h-1 w-8 rounded-full", n < i ? "accent-fill bg-brand-700" : n === i ? "accent-fill bg-brand-800 opacity-60" : "bg-white/10")} />
-          ))}
-        </div>
-      </Row>
-    );
-  }
+  // The rendering overlay on the preview already shows the percentage and current scene.
+  if (gen.phase === "running") return null;
 
   if (gen.phase === "error") {
     return (
@@ -98,17 +62,8 @@ export function RenderStatus({
     );
   }
 
-  return (
-    <Row>
-      <span className="flex items-center gap-2 text-zinc-500">
-        {hasScene && (
-          <>
-            <MessageSquare className="size-4" /> Ask the assistant to change anything. Hit Export when it looks right.
-          </>
-        )}
-      </span>
-    </Row>
-  );
+  // Nothing to report: render nothing so the preview gets the space.
+  return null;
 }
 
 function Row({ children }: { children: React.ReactNode }) {
