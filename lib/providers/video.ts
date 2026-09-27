@@ -52,8 +52,9 @@ export function expectedClipSeconds(provider: VideoProvider): number {
   return 6;
 }
 
-/** Which external provider (if any) is configured, in priority order. */
+/** Which external provider (if any) is configured, in priority order. AI_VIDEO=off skips them all (stock footage only). */
 export function configuredVideoProvider(): Exclude<VideoProvider, "stock" | "local-motion"> | null {
+  if (process.env.AI_VIDEO === "off") return null;
   if (process.env.LUMA_API_KEY) return "luma";
   if (process.env.REPLICATE_API_TOKEN) return "replicate";
   if (process.env.GEMINI_API_KEY) return "gemini";
