@@ -28,6 +28,9 @@ function ago(ms: number, now: number) {
 
 const fullDate = (ms: number) => new Date(ms).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
 
+/** Saved projects are hidden for now: the home page shows only "New project" and the examples. */
+const SHOW_PROJECTS = false;
+
 /** Every saved project, newest edit first. */
 export function Dashboard({ projects: initial }: { projects: ProjectSummary[] }) {
   const router = useRouter();
@@ -67,7 +70,7 @@ export function Dashboard({ projects: initial }: { projects: ProjectSummary[] })
       <main className="mx-auto max-w-7xl px-4 pt-8 pb-16 sm:px-6">
         <NewAd onPick={newProject} />
 
-        {projects.length > 0 && (
+        {SHOW_PROJECTS && projects.length > 0 && (
           <section className="mt-14">
             {projects.length > 4 && (
               <div className="mb-6 flex justify-end">
