@@ -5,7 +5,7 @@ import { connectionCookie, cookieOptions, decodeConnection, encodeConnection, fr
 
 export const runtime = "nodejs";
 // Instagram and TikTok process the upload before it goes live.
-export const maxDuration = 600;
+export const maxDuration = 300; // Vercel Hobby's ceiling; Pro allows up to 800.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");

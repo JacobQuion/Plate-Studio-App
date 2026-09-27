@@ -5,7 +5,7 @@ import type { GenerateStreamEvent } from "@/lib/types";
 
 export const runtime = "nodejs";
 // A 30 second ad renders ~5-8 scenes; AI video providers can add a couple of minutes.
-export const maxDuration = 600;
+export const maxDuration = 300; // Vercel Hobby's ceiling; Pro allows up to 800.
 
 /**
  * POST /api/generate  { project: AdProject, library: LibraryDish[], projectId?, editKey? }
