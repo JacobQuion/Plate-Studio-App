@@ -29,6 +29,11 @@ export interface ProgressEvent {
   stage: StageId;
   status: StageStatus;
   detail?: string;
+  /** Items finished in this stage (clips back, scenes rendered), when it has countable items. */
+  completed?: number;
+  total?: number;
+  /** Estimated seconds left for the whole render, as of this event. */
+  etaSeconds?: number;
 }
 
 export type VideoProvider = "luma" | "replicate" | "gemini" | "stock" | "local-motion";
