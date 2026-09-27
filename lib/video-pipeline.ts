@@ -6,7 +6,7 @@ import sharp from "sharp";
 import { probeDuration, runFfmpeg } from "@/lib/ffmpeg";
 import { TRANSITION_SECONDS as TRANSITION, VOICE_LEAD, planTimeline, resolveScenes, type AdProject, type CameraStyle, type LibraryDish, type ResolvedScene } from "@/lib/ad-plan";
 import { renderMusicBed } from "@/lib/music";
-import { VIDEO_HEIGHT, VIDEO_WIDTH, renderIntroOverlay, renderOutroOverlay, type FrameBoxes } from "@/lib/overlays";
+import { OUTPUT_HEIGHT, OUTPUT_WIDTH, RENDER_QUALITY, VIDEO_WIDTH, renderIntroOverlay, renderOutroOverlay, type FrameBoxes } from "@/lib/overlays";
 import { buildMotionPrompt, configuredVideoProvider, expectedClipSeconds, generateMotionClip } from "@/lib/providers/video";
 import { RenderEstimate } from "@/lib/render-estimate";
 import { fetchStockClip, stockConfigured } from "@/lib/providers/stock";
@@ -52,7 +52,19 @@ export interface AdResult {
 
 export type ProgressCallback = (event: ProgressEvent) => void;
 
-const FPS = 30;
+const LIGHT = RENDER_QUALITY === "light";
+const FPS = LIGHT ? 24 : 30;
+/** x264 speed/quality: scenes are intermediates, so they get a higher quality than the final mix. */
+const PRESET = LIGHT ? "superfast" : "veryfast";
+const SCENE_CRF = LIGHT ? "20" : "16";
+const FINAL_CRF = LIGHT ? "23" : "20";
+/**
+ * FFmpeg sizes its thread pools from the host's cores, but a Vercel function only gets about one;
+ * dozens of threads fighting over it are far slower than a few. RENDER_THREADS overrides.
+ */
+const THREADS = process.env.RENDER_THREADS || (LIGHT ? "2" : null);
+/** Cap FFmpeg's filter and encoder threads (the output file is always the last arg). */
+const limitThreads = (args: string[]) => (THREADS ? ["-filter_complex_threads", THREADS, ...args.slice(0, -1), "-threads", THREADS, args[args.length - 1]] : args);
 /** Rough length of one shot inside a dish scene. */
 const SHOT_LENGTH = 4;
 /** Shortest shot we'll cut an AI clip down to. */
@@ -61,16 +73,16 @@ const MIN_CLIP_SHOT = 2.2;
 const MAX_SLOWMO = 1.6;
 /** AI clips generated at once (the APIs queue the rest anyway). */
 const MOTION_CONCURRENCY = 6;
-/** Scenes rendered at once. Each FFmpeg process is already multi-threaded. */
-const RENDER_CONCURRENCY = 2;
+/** Scenes rendered at once. Each FFmpeg process is already multi-threaded; with one CPU, a second only competes. */
+const RENDER_CONCURRENCY = LIGHT ? 1 : 2;
 
 /** Stills are oversized relative to the output so camera moves stay sharp. */
-const STILL_WIDTH = Math.round(VIDEO_WIDTH * 1.5);
-const STILL_HEIGHT = Math.round(VIDEO_HEIGHT * 1.5);
+const STILL_WIDTH = Math.round(OUTPUT_WIDTH * 1.5);
+const STILL_HEIGHT = Math.round(OUTPUT_HEIGHT * 1.5);
 
 /** Warm, filmic look: gentle contrast, amber highlights, cooler shadows, vignette and fine grain. */
 const GRADE =
-  "eq=contrast=1.07:saturation=1.16:brightness=0.01,colorbalance=rs=-0.02:bs=0.03:rh=0.05:gh=0.015:bh=-0.04,vignette=PI/4.5,noise=alls=5:allf=t";
+  "eq=contrast=1.07:saturation=1.16:brightness=0.01,colorbalance=rs=-0.02:bs=0.03:rh=0.05:gh=0.015:bh=-0.04,vignette=PI/4.5" + (LIGHT ? "" : ",noise=alls=5:allf=t");
 
 /** Where jobs are written. Served back to the browser by /api/video/[id]. */
 export const JOBS_ROOT = path.join(os.tmpdir(), "plate-studio");
@@ -274,7 +286,7 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
         out: scenePaths[i],
       });
     }
-    await runFfmpeg(args, 240_000);
+    await runFfmpeg(limitThreads(args), 240_000);
     rendered++;
     emit("assemble", "active", rendered < scenes.length ? `Rendering scene ${rendered + 1} of ${scenes.length}` : "Mixing voice and music", {
       completed: rendered,
@@ -285,7 +297,7 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
   const musicPath = project.music ? await renderMusicBed(path.join(dir, "music.wav"), total) : null;
   const outputPath = jobOutputPath(jobId);
   await runFfmpeg(
-    finalMixArgs({
+    limitThreads(finalMixArgs({
       scenes: scenePaths,
       durations,
       transitions: scenes.map((s) => s.transition),
@@ -293,10 +305,10 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
       voices: voice.clips.map((c) => c?.path ?? null),
       musicPath,
       outputPath,
-    }),
+    })),
     300_000,
   );
-  emit("assemble", "done", `final_video.mp4 · ${total.toFixed(1)}s · ${scenes.length} scenes · 1920×1080`);
+  emit("assemble", "done", `final_video.mp4 · ${total.toFixed(1)}s · ${scenes.length} scenes · ${OUTPUT_WIDTH}×${OUTPUT_HEIGHT}`);
 
   return {
     jobId,
@@ -338,7 +350,7 @@ function moveFilter(move: Move, frames: number): string {
     punchIn: [`1.0+0.14*(on/${frames})`, cx, cy],
   };
   const [z, x, y] = m[move];
-  return `zoompan=z='${z}':x='${x}':y='${y}':d=1:s=${VIDEO_WIDTH}x${VIDEO_HEIGHT}:fps=${FPS}`;
+  return `zoompan=z='${z}':x='${x}':y='${y}':d=1:s=${OUTPUT_WIDTH}x${OUTPUT_HEIGHT}:fps=${FPS}`;
 }
 
 /** Split `duration` into `count` shots, as frame counts that sum exactly. */
@@ -353,18 +365,19 @@ const encodeArgs = (duration: number, out: string) => [
   "-t", duration.toFixed(2),
   "-r", String(FPS),
   "-c:v", "libx264",
-  "-preset", "veryfast",
-  "-crf", "16",
+  "-preset", PRESET,
+  "-crf", SCENE_CRF,
   "-pix_fmt", "yuv420p",
   "-an",
   out,
 ];
 
-/** Overlay that fades + slides in at `start` and fades out at `end`. dx/dy = starting offset in px. */
+/** Overlay that fades + slides in at `start` and fades out at `end`. dx/dy = starting offset in px on the 1920px canvas. */
 function animatedLayer(input: string, label: string, start: number, end: number | null, from: { dx?: number; dy?: number }) {
   const fades = [`format=rgba`, `fade=in:st=${start.toFixed(2)}:d=0.5:alpha=1`];
   if (end != null) fades.push(`fade=out:st=${end.toFixed(2)}:d=0.45:alpha=1`);
-  const slide = (offset = 0, speed: number) =>
+  const px = OUTPUT_WIDTH / VIDEO_WIDTH;
+  const slide = (canvasOffset = 0, canvasSpeed: number, offset = Math.round(canvasOffset * px), speed = Math.round(canvasSpeed * px)) =>
     offset ? `'if(lt(t,${start.toFixed(2)}),${offset},${offset < 0 ? "min" : "max"}(0,${offset}${offset < 0 ? "+" : "-"}(t-${start.toFixed(2)})*${speed}))'` : "0";
   return {
     prep: `${input}${fades.join(",")}[${label}]`,
@@ -389,7 +402,7 @@ function clipShot(input: string, clip: Clip, frames: number, label: string, from
   const usable = Math.max(0.5, clip.duration - start - 0.1);
   const stretch = frames / FPS / usable;
   return (
-    `${input}scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:force_original_aspect_ratio=increase,crop=${VIDEO_WIDTH}:${VIDEO_HEIGHT},` +
+    `${input}scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}:force_original_aspect_ratio=increase,crop=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT},` +
     `${start ? `trim=start=${start.toFixed(2)},setpts=PTS-STARTPTS,` : ""}` +
     `${stretch > 1 ? `setpts=${stretch.toFixed(3)}*PTS,` : ""}fps=${FPS},trim=end_frame=${frames},setpts=PTS-STARTPTS,setsar=1${label}`
   );
@@ -602,8 +615,8 @@ export function finalMixArgs({
     "-t", T,
     "-r", String(FPS),
     "-c:v", "libx264",
-    "-preset", "veryfast",
-    "-crf", "20",
+    "-preset", PRESET,
+    "-crf", FINAL_CRF,
     "-pix_fmt", "yuv420p",
     "-c:a", "aac",
     "-b:a", "192k",

@@ -243,7 +243,7 @@ export function ExportDialog({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[15px] font-medium text-zinc-100">{project.restaurant.trim() || "Untitled project"}</p>
                   <p className="mt-0.5 text-[13px] text-zinc-500">
-                    {video ? "MP4 · 1920×1080 · up to date" : rendering ? "Rendering your latest edits…" : "Your latest edits will be rendered first"}
+                    {video ? "MP4 · up to date" : rendering ? "Rendering your latest edits…" : "Your latest edits will be rendered first"}
                   </p>
                 </div>
                 <button

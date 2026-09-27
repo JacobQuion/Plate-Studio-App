@@ -2,7 +2,8 @@ import sharp from "sharp";
 import type { FrameField } from "@/lib/ad-plan";
 
 /**
- * Renders the ad's text layers as full-frame 1920x1080 transparent PNGs.
+ * Renders the ad's text layers as full-frame transparent PNGs, laid out on a 1920x1080 canvas
+ * and rasterized at the output size.
  * FFmpeg then animates each layer in and out with fades and slides.
  *
  * Rendering text through SVG + sharp instead of FFmpeg's drawtext means we don't
@@ -24,8 +25,18 @@ const box = (x: number, y: number, w: number, h: number): Box =>
   [x / VIDEO_WIDTH, y / VIDEO_HEIGHT, w / VIDEO_WIDTH, h / VIDEO_HEIGHT].map((v) => Math.round(v * 1000) / 1000) as Box;
 const textWidth = (lines: string[], fontSize: number, em: number) => Math.max(...lines.map((l) => l.length)) * fontSize * em;
 
+/** The canvas every layer is designed on. The output can be smaller (see OUTPUT_WIDTH). */
 export const VIDEO_WIDTH = 1920;
 export const VIDEO_HEIGHT = 1080;
+
+/**
+ * "light" renders 720p at 24 fps with faster encoder settings. Vercel's functions get about
+ * one CPU and 5 minutes, which isn't enough for 1080p; RENDER_QUALITY=full|light overrides.
+ */
+export const RENDER_QUALITY: "full" | "light" =
+  process.env.RENDER_QUALITY === "full" || process.env.RENDER_QUALITY === "light" ? process.env.RENDER_QUALITY : process.env.VERCEL ? "light" : "full";
+export const OUTPUT_WIDTH = RENDER_QUALITY === "light" ? 1280 : VIDEO_WIDTH;
+export const OUTPUT_HEIGHT = RENDER_QUALITY === "light" ? 720 : VIDEO_HEIGHT;
 
 const FONT = `'Helvetica Neue', Helvetica, Arial, sans-serif`;
 const SIDE_PADDING = 110;
@@ -65,7 +76,7 @@ function wrap(text: string, fontSize: number, maxWidth: number, maxLines: number
 
 function svgDoc(body: string, defs = ""): Buffer {
   return Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${VIDEO_WIDTH}" height="${VIDEO_HEIGHT}" viewBox="0 0 ${VIDEO_WIDTH} ${VIDEO_HEIGHT}">
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${OUTPUT_WIDTH}" height="${OUTPUT_HEIGHT}" viewBox="0 0 ${VIDEO_WIDTH} ${VIDEO_HEIGHT}">
       <defs>
         <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
           <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.55"/>
