@@ -27,6 +27,31 @@ function timeoutMs(): number {
   return Number(process.env.VIDEO_API_TIMEOUT_SECONDS ?? 150) * 1000;
 }
 
+/** Clip resolution for providers that support it (Veo, Luma). Replicate models take their own inputs. */
+export function videoResolution(): "720p" | "1080p" {
+  return process.env.VIDEO_RESOLUTION === "1080p" ? "1080p" : "720p";
+}
+
+/** Veo only renders 1080p as 8 second clips, so the length setting is overridden then. */
+function geminiClipSeconds(): number {
+  return videoResolution() === "1080p" ? 8 : Number(process.env.GEMINI_VIDEO_SECONDS || 4);
+}
+
+/**
+ * Rough wall-clock seconds for one clip, used only for the progress bar's first time
+ * estimate; the client corrects it as real clips come back.
+ */
+export function expectedClipSeconds(provider: VideoProvider): number {
+  const hd = videoResolution() === "1080p";
+  if (provider === "gemini") {
+    const quick = /fast|lite/.test(process.env.GEMINI_VIDEO_MODEL || "fast");
+    return (quick ? 60 : 110) * (hd ? 1.5 : 1);
+  }
+  if (provider === "luma") return hd ? 90 : 60;
+  if (provider === "replicate") return 50;
+  return 6;
+}
+
 /** Which external provider (if any) is configured, in priority order. */
 export function configuredVideoProvider(): Exclude<VideoProvider, "stock" | "local-motion"> | null {
   if (process.env.LUMA_API_KEY) return "luma";
@@ -51,7 +76,7 @@ async function generateWithLuma(imageUrl: string | null, prompt: string, outPath
       prompt,
       model: "ray-2",
       aspect_ratio: "16:9",
-      resolution: "720p",
+      resolution: videoResolution(),
       duration: "5s",
       ...(imageUrl ? { keyframes: { frame0: { type: "image", url: imageUrl } } } : {}),
     }),
@@ -134,7 +159,7 @@ async function generateWithGemini(imageUrl: string | null, prompt: string, outPa
   const model = process.env.GEMINI_VIDEO_MODEL || "veo-3.1-fast-generate-preview";
   const body = JSON.stringify({
     instances: [{ prompt, ...(imageUrl ? { image: await imageBytes(imageUrl) } : {}) }],
-    parameters: { aspectRatio: "16:9", durationSeconds: Number(process.env.GEMINI_VIDEO_SECONDS || 4), resolution: "720p" },
+    parameters: { aspectRatio: "16:9", durationSeconds: geminiClipSeconds(), resolution: videoResolution() },
   });
   // Veo takes a minute or two per clip, so it gets a longer floor than the other providers.
   const deadline = Date.now() + Math.max(timeoutMs(), 300_000);
