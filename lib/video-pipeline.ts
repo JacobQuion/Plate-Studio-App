@@ -140,7 +140,7 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
   });
   const emit = (stage: StageId, status: StageStatus, detail?: string, count?: { completed: number; total: number }) => {
     estimate.update(stage, status, count?.completed, count?.total);
-    onProgress({ type: "progress", stage, status, detail, ...count, etaSeconds: estimate.remaining() });
+    onProgress({ type: "progress", stage, status, detail, ...count, etaSeconds: estimate.remaining(), etaFloorSeconds: estimate.floor() });
   };
 
   const jobId = randomUUID();

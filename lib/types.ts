@@ -34,6 +34,8 @@ export interface ProgressEvent {
   total?: number;
   /** Estimated seconds left for the whole render, as of this event. */
   etaSeconds?: number;
+  /** Seconds that will still be left once the next item in flight finishes; the countdown stops here. */
+  etaFloorSeconds?: number;
 }
 
 export type VideoProvider = "luma" | "replicate" | "gemini" | "stock" | "local-motion";

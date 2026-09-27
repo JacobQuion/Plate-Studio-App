@@ -19,22 +19,43 @@ export class RenderEstimate {
     if (completed !== undefined && total) this.counts.set(stage, { completed, total });
   }
 
-  /** Seconds left for one stage. */
-  private stageLeft(stage: StageId, now: number): number {
+  /**
+   * Seconds left for one stage. With `afterNext`, the seconds that will still be left once
+   * the next item in flight finishes (0 for a running stage without countable items).
+   */
+  private stageLeft(stage: StageId, now: number, afterNext = false): number {
     if (this.finished.has(stage)) return 0;
     const plan = this.plan[stage];
     const start = this.started.get(stage);
     if (start === undefined) return plan;
     const elapsed = (now - start) / 1000;
     const count = this.counts.get(stage);
+    if (afterNext) {
+      if (!count) return 0;
+      const perItem = count.completed > 0 ? elapsed / count.completed : plan / count.total;
+      return perItem * Math.max(0, count.total - count.completed - 1);
+    }
     if (count && count.completed > 0) return (elapsed / count.completed) * (count.total - count.completed);
     // Nothing back yet: count down the plan, but never claim it's about to finish.
     return Math.max(plan - elapsed, plan * 0.1);
   }
 
+  private total(now: number, afterNext: boolean): number {
+    const left = (s: StageId) => this.stageLeft(s, now, afterNext);
+    return Math.round(left("assets") + Math.max(left("motion"), left("voice")) + left("assemble"));
+  }
+
   /** Seconds left for the whole render. */
   remaining(now = Date.now()): number {
-    const left = (s: StageId) => this.stageLeft(s, now);
-    return Math.round(left("assets") + Math.max(left("motion"), left("voice")) + left("assemble"));
+    return this.total(now, false);
+  }
+
+  /**
+   * Seconds that will still be left when the next item in flight finishes. The client counts
+   * `remaining()` down between events but stops here, so a slow scene render can't run the
+   * bar ahead of the scenes actually done.
+   */
+  floor(now = Date.now()): number {
+    return Math.min(this.total(now, true), this.total(now, false));
   }
 }

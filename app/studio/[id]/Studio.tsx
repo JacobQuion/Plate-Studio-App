@@ -201,7 +201,7 @@ export function Studio({ id, initial, template }: { id: string; initial: Project
     const key = editKey(p, lib);
     const startedAt = Date.now();
     let stages = freshStages();
-    let eta: { seconds: number; at: number } | undefined;
+    let eta: { seconds: number; floor: number; at: number } | undefined;
     setGen({ phase: "running", stages, startedAt });
     const fail = (message: string) => {
       setGen({ phase: "error", stages, message });
@@ -241,7 +241,7 @@ export function Studio({ id, initial, template }: { id: string; initial: Project
               ...stages,
               [event.stage]: { status: event.status, detail: event.detail, completed: event.completed, total: event.total },
             };
-            if (event.etaSeconds !== undefined) eta = { seconds: event.etaSeconds, at: Date.now() };
+            if (event.etaSeconds !== undefined) eta = { seconds: event.etaSeconds, floor: event.etaFloorSeconds ?? 0, at: Date.now() };
             setGen({ phase: "running", stages, startedAt, eta });
           } else if (event.type === "done") {
             setGen({
