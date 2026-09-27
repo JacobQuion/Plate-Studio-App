@@ -108,8 +108,25 @@ export const DEMO_RESTAURANTS: DemoRestaurant[] = [
   { id: "burger", label: "Burger chain", cuisine: "Fast-food burger chain", name: "Big Stack Burgers", website: "bigstack.com", cta: "Order on the app", dishes: MENUS.burger },
 ];
 
-/** Starting points offered on the dashboard. The café imports a real Yelp page through the assistant. */
-export const TEMPLATES: { id: string; name: string; cuisine: string; imageUrl: string; detail: string }[] = [
-  ...DEMO_RESTAURANTS.map((d) => ({ id: d.id, name: d.name, cuisine: d.cuisine, imageUrl: d.dishes[0].imageUrl, detail: `${d.dishes.length} dishes` })),
-  { id: "cafe", name: "Caffe Strada", cuisine: "Berkeley café", imageUrl: MENUS.cafe[1].imageUrl, detail: "Imported from Yelp" },
+/** The dashboard's examples: the samples plus a café with its menu built in (no live Yelp import). */
+export const DEMOS: DemoRestaurant[] = [
+  ...DEMO_RESTAURANTS,
+  { id: "cafe", label: "Café", cuisine: "Berkeley café", name: "Caffe Strada", website: "caffestrada.com", cta: "Stop by today", dishes: MENUS.cafe },
 ];
+
+/**
+ * Each example is one shared project, "demo-<id>": rendered once, then every visit replays that
+ * render. Demo projects aren't listed on the dashboard, and editing one saves a copy instead.
+ */
+export const DEMO_PREFIX = "demo-";
+export const demoProjectId = (demoId: string) => `${DEMO_PREFIX}${demoId}`;
+export const demoForProject = (projectId: string) => (projectId.startsWith(DEMO_PREFIX) ? DEMOS.find((d) => demoProjectId(d.id) === projectId) : undefined);
+
+/** Starting points offered on the dashboard. */
+export const TEMPLATES: { id: string; name: string; cuisine: string; imageUrl: string; detail: string }[] = DEMOS.map((d) => ({
+  id: d.id,
+  name: d.name,
+  cuisine: d.cuisine,
+  imageUrl: d.id === "cafe" ? d.dishes[1].imageUrl : d.dishes[0].imageUrl,
+  detail: `${d.dishes.length} dishes`,
+}));

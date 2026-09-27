@@ -17,6 +17,7 @@ import type { PublishRecord } from "@/lib/platforms";
 import { deleteObject, listFolders, objectExists, objectFile, objectUrl, putObject, readObject } from "@/lib/storage";
 import type { GenerateDoneEvent } from "@/lib/types";
 import { JOBS_ROOT, jobOutputPath } from "@/lib/video-pipeline";
+import { DEMO_PREFIX } from "@/lib/demo-menus";
 
 /**
  * Saved projects, one folder each under projects/<id>/ in storage (lib/storage.ts):
@@ -258,10 +259,10 @@ export async function summarize(record: ProjectRecord): Promise<ProjectSummary> 
   };
 }
 
-/** Every saved project, most recently edited first. */
+/** Every saved project, most recently edited first. The shared example projects aren't anyone's, so they're left out. */
 export async function listProjects(): Promise<ProjectSummary[]> {
   const ids = await listFolders("projects/");
-  const records = (await Promise.all(ids.filter(isProjectId).map(getProject))).filter((r): r is ProjectRecord => !!r);
+  const records = (await Promise.all(ids.filter((id) => isProjectId(id) && !id.startsWith(DEMO_PREFIX)).map(getProject))).filter((r): r is ProjectRecord => !!r);
   const summaries = await Promise.all(records.map(summarize));
   return summaries.sort((a, b) => b.updatedAt - a.updatedAt);
 }

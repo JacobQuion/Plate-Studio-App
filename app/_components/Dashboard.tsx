@@ -1,11 +1,11 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Clapperboard, Download, EllipsisVertical, Plus, Search, Trash2, UtensilsCrossed } from "lucide-react";
+import { Clapperboard, Download, EllipsisVertical, Play, Plus, Search, Trash2, UtensilsCrossed } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { TEMPLATES } from "@/lib/demo-menus";
+import { TEMPLATES, demoProjectId } from "@/lib/demo-menus";
 import { PLATFORM_INFO, type Platform } from "@/lib/platforms";
 import type { ProjectSummary } from "@/lib/projects";
 import { PlatformIcon } from "./PlatformIcon";
@@ -40,7 +40,7 @@ export function Dashboard({ projects: initial }: { projects: ProjectSummary[] })
     return () => clearInterval(t);
   }, []);
 
-  const newProject = (template?: string) => router.push(`/studio/${crypto.randomUUID()}${template ? `?template=${template}` : ""}`);
+  const newProject = (template?: string) => router.push(`/studio/${template ? demoProjectId(template) : crypto.randomUUID()}`);
 
   const remove = async (p: ProjectSummary) => {
     if (!confirm(`Delete "${p.name || "Untitled project"}"? Its video and chat will be deleted too. Posts you've published stay up.`)) return;
@@ -101,7 +101,7 @@ export function Dashboard({ projects: initial }: { projects: ProjectSummary[] })
   );
 }
 
-/** "New project" plus the sample restaurants, as one 3×2 grid. Templates open a new project with their menu loaded. */
+/** "New project" plus the sample restaurants, as one 3×2 grid. Templates open their shared demo project. */
 function NewAd({ onPick }: { onPick: (template?: string) => void }) {
   return (
     <section>
@@ -127,7 +127,7 @@ function NewAd({ onPick }: { onPick: (template?: string) => void }) {
                 <img src={t.imageUrl.replace("w=1600", "w=800")} alt="" loading="lazy" className="size-full object-cover transition duration-500 group-hover:scale-[1.03]" />
                 <span className="absolute top-2 left-2 rounded-full bg-black/65 px-2 py-1 text-[11px] font-medium text-zinc-100 backdrop-blur-md">Example</span>
                 <span className="absolute right-2 bottom-2 inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[12px] font-semibold text-zinc-950 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
-                  <Plus className="size-3" strokeWidth={3} /> Use template
+                  <Play className="size-3 fill-current" strokeWidth={3} /> Watch demo
                 </span>
               </div>
               <p className="mt-3 truncate text-[15px] font-semibold text-zinc-100">{t.name}</p>

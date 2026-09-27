@@ -17,16 +17,16 @@ import {
   type LibraryDish,
   type Timeline as TimelineData,
 } from "@/lib/ad-plan";
-import { DEMO_RESTAURANTS } from "@/lib/demo-menus";
+import { DEMOS, DEMO_RESTAURANTS, type DemoRestaurant } from "@/lib/demo-menus";
 import type { ProjectRecord } from "@/lib/projects";
-import type { GenerateDoneEvent, GenerateStreamEvent } from "@/lib/types";
+import type { GenerateDoneEvent, GenerateStreamEvent, StageId } from "@/lib/types";
 import { ChatPane, type PendingPhoto } from "@/app/_components/ChatPane";
 import { ExportDialog } from "@/app/_components/ExportDialog";
 import { Preview } from "@/app/_components/Preview";
 import { InfoButton } from "@/app/_components/InfoButton";
 import { RenderStatus } from "@/app/_components/RenderStatus";
 import { Timeline } from "@/app/_components/Timeline";
-import { fileToDataUri, freshStages, titleFromFilename, type ChatMessage, type GenState } from "@/app/_components/shared";
+import { fileToDataUri, freshStages, titleFromFilename, type ChatMessage, type GenState, type StageState } from "@/app/_components/shared";
 
 const SAMPLE_URL = "https://www.yelp.com/biz/caffe-strada-berkeley";
 /** The café sample imports a real Yelp page through the assistant; the rest are built in. */
@@ -56,11 +56,32 @@ function restoredGen(initial: ProjectRecord | null): GenState {
   return { phase: "done", stages, result, elapsed };
 }
 
+/** How long a demo's saved render takes to "render" again on each visit. */
+const REPLAY_MS = 6500;
+
+/** The render stages at `f` (0..1) through a replayed render of `scenes` scenes. */
+function replayStages(f: number, scenes: number): Record<StageId, StageState> {
+  const stages = freshStages();
+  const steps: [StageId, number][] = [["assets", 0.12], ["motion", 0.3], ["voice", 0.45], ["assemble", 1]];
+  let from = 0;
+  for (const [stage, to] of steps) {
+    if (f >= to) stages[stage] = { status: "done" };
+    else if (f >= from) {
+      const total = stage === "assemble" ? scenes + 1 : undefined;
+      stages[stage] = { status: "active", total, completed: total ? Math.floor(((f - from) / (to - from)) * total) : undefined };
+    }
+    from = to;
+  }
+  return stages;
+}
+
 /**
  * `initial` is the saved project (its render only when the video file still exists), or null for a new one.
  * `template` is a sample to load into a new project.
+ * `demo`: a dashboard example (a shared project). It renders once, then each visit replays that render;
+ * editing it saves the edits as a new project of the user's own instead.
  */
-export function Studio({ id, initial, template }: { id: string; initial: ProjectRecord | null; template?: string }) {
+export function Studio({ id: routeId, initial, template, demo = false }: { id: string; initial: ProjectRecord | null; template?: string; demo?: boolean }) {
   const router = useRouter();
   const [project, setProject] = useState<AdProject>(() => initial?.project ?? newProject());
   const [library, setLibrary] = useState<LibraryDish[]>(() => initial?.library ?? []);
@@ -69,7 +90,11 @@ export function Studio({ id, initial, template }: { id: string; initial: Project
   const [cursor, setCursor] = useState(0);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingPhoto[]>([]);
-  const [gen, setGen] = useState<GenState>(() => restoredGen(initial));
+  /** The project this studio saves to: the route's, until an edited demo becomes a copy. */
+  const [id, setId] = useState(routeId);
+  const idRef = useRef(routeId);
+  const replay = demo && !!initial?.render;
+  const [gen, setGen] = useState<GenState>(() => (replay ? { phase: "running", stages: freshStages(), startedAt: Date.now(), replayUntil: Date.now() + REPLAY_MS } : restoredGen(initial)));
   const [renderedKey, setRenderedKey] = useState<string | null>(initial?.render?.editKey ?? null);
   const [exportOpen, setExportOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -148,8 +173,8 @@ export function Studio({ id, initial, template }: { id: string; initial: Project
   const latest = useRef({ project, library, messages });
   latest.current = { project, library, messages };
   const savedKey = useRef<string | null>(initial ? saveKey(initial.project, initial.library, (initial.messages ?? []) as unknown as ChatMessage[]) : null);
-  /** The untouched template's key: "pending" until the first save after it loads records it. */
-  const templateKey = useRef<string | null>(template ? "pending" : null);
+  /** The untouched template's key: "pending" until the first save after it loads records it. A saved demo's is what's saved. */
+  const templateKey = useRef<string | null>(template ? "pending" : demo ? savedKey.current : null);
   const saving = useRef<Promise<void>>(Promise.resolve());
   /** `force` saves an untouched template too (rendering needs the project on the server). */
   const save = useCallback((force = false) => {
@@ -160,8 +185,15 @@ export function Studio({ id, initial, template }: { id: string; initial: Project
       if (savedKey.current === null && !p.restaurant.trim() && !lib.length && !msgs.length) return;
       if (savedKey.current === null && templateKey.current === "pending") templateKey.current = key;
       if (savedKey.current === null && key === templateKey.current && !force) return;
+      // An edited demo: keep the example as it is and save the edits as a new project.
+      if (demo && idRef.current === routeId && key !== templateKey.current) {
+        idRef.current = crypto.randomUUID();
+        savedKey.current = null;
+        setId(idRef.current);
+        window.history.replaceState(null, "", `/studio/${idRef.current}`);
+      }
       try {
-        const res = await fetch(`/api/projects/${id}`, {
+        const res = await fetch(`/api/projects/${idRef.current}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ project: p, library: lib, messages: msgs.filter((m) => !m.error || m.role === "user") }),
@@ -172,7 +204,7 @@ export function Studio({ id, initial, template }: { id: string; initial: Project
       }
     });
     return saving.current;
-  }, [id]);
+  }, [demo, routeId]);
   useEffect(() => {
     const t = setTimeout(save, SAVE_DELAY);
     return () => clearTimeout(t);
@@ -223,7 +255,7 @@ export function Studio({ id, initial, template }: { id: string; initial: Project
         body: JSON.stringify({
           project: p,
           library: lib.filter((d) => used.has(d.id)),
-          projectId: id,
+          projectId: idRef.current,
           editKey: key,
         }),
       });
@@ -285,21 +317,27 @@ export function Studio({ id, initial, template }: { id: string; initial: Project
 
   const openLink = () => setLinkRequest((n) => n + 1);
 
-  const trySample = (sampleId: string) => {
-    const demo = DEMO_RESTAURANTS.find((d) => d.id === sampleId);
-    if (!demo) return send(`Make an ad from this menu: ${SAMPLE_URL}`);
-    if (busy || running) return;
-    const known = new Set(demo.dishes.map((d) => d.id));
-    setLibrary((lib) => [...lib.filter((d) => !known.has(d.id)), ...demo.dishes]);
-    setProject((p) => setAdDishes({ ...p, restaurant: demo.name, website: demo.website, cta: demo.cta }, demo.dishes.map((d) => d.id)));
+  const loadSample = (sample: DemoRestaurant) => {
+    const known = new Set(sample.dishes.map((d) => d.id));
+    setLibrary((lib) => [...lib.filter((d) => !known.has(d.id)), ...sample.dishes]);
+    setProject((p) => setAdDishes({ ...p, restaurant: sample.name, website: sample.website, cta: sample.cta }, sample.dishes.map((d) => d.id)));
     setMessages((m) => [
       ...m,
       {
         id: msgId(),
         role: "assistant",
-        text: `I loaded the sample menu for ${demo.name} with ${demo.dishes.length} dishes. Hit Render to make the video, or tell me what to change first.`,
+        text: demo
+          ? `This is a sample ad for ${sample.name}. Tell me what to change, and your edits are saved as a project of your own.`
+          : `I loaded the sample menu for ${sample.name} with ${sample.dishes.length} dishes. Hit Render to make the video, or tell me what to change first.`,
       },
     ]);
+  };
+
+  const trySample = (sampleId: string) => {
+    const sample = DEMO_RESTAURANTS.find((d) => d.id === sampleId);
+    if (!sample) return send(`Make an ad from this menu: ${SAMPLE_URL}`);
+    if (busy || running) return;
+    loadSample(sample);
   };
 
   /** The video with every edit in it, rendering first when needed. */
@@ -322,10 +360,40 @@ export function Studio({ id, initial, template }: { id: string; initial: Project
   useEffect(() => {
     if (!template || templateLoaded.current) return;
     templateLoaded.current = true;
-    router.replace(`/studio/${id}`, { scroll: false });
-    trySample(template);
+    if (!demo) router.replace(`/studio/${routeId}`, { scroll: false });
+    const sample = (demo ? DEMOS : DEMO_RESTAURANTS).find((d) => d.id === template);
+    if (sample) loadSample(sample);
+    else trySample(template);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [template]);
+
+  // A demo that hasn't been rendered yet (or whose last render failed) renders as soon as it's loaded.
+  const autoRender = useRef(demo && !initial?.render);
+  useEffect(() => {
+    if (!autoRender.current || !hasDishes) return;
+    autoRender.current = false;
+    void render();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasDishes]);
+
+  // A demo that has been rendered replays that render: the progress animation, then the video.
+  useEffect(() => {
+    if (!replay || gen.phase !== "running" || !gen.replayUntil) return;
+    const { startedAt, replayUntil } = gen;
+    const sceneCount = initial!.render!.timeline.length;
+    const t = setInterval(() => {
+      const f = (Date.now() - startedAt) / (replayUntil - startedAt);
+      if (f >= 1) {
+        clearInterval(t);
+        setGen(restoredGen(initial));
+        setShowVideo(true);
+        setCurrentTime(0);
+      } else setGen({ phase: "running", stages: replayStages(f, sceneCount), startedAt, replayUntil });
+    }, 250);
+    return () => clearInterval(t);
+    // Keyed on the replay itself, not each progress update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replay, gen.phase === "running" && gen.replayUntil]);
 
   const send = async (text: string) => {
     if (busy) return;

@@ -11,7 +11,7 @@ import { buildMotionPrompt, configuredVideoProvider, expectedClipSeconds, genera
 import { RenderEstimate } from "@/lib/render-estimate";
 import { fetchStockClip, stockConfigured } from "@/lib/providers/stock";
 import { bitePrompt, cheersPrompt, firePrompt, kitchenPrompt, menuSetting, platingPrompt, stockQueries, type ShotKind, type StockQuery } from "@/lib/shots";
-import { generateVoiceover, voiceConfigured } from "@/lib/providers/voice";
+import { cloudVoiceConfigured, generateVoiceover, voiceConfigured } from "@/lib/providers/voice";
 import { fetchBuffer } from "@/lib/safe-fetch";
 import type { ProgressEvent, SceneTiming, StageId, StageStatus, VideoProvider, VoiceProvider } from "@/lib/types";
 
@@ -147,7 +147,7 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
   const estimate = new RenderEstimate({
     assets: 3,
     motion: Math.ceil(jobs.length / MOTION_CONCURRENCY) * expectedClipSeconds(provider ?? "stock"),
-    voice: Math.ceil(spoken / 2) * (voiceConfigured() ? 3 : 1.5),
+    voice: Math.ceil(spoken / 2) * (cloudVoiceConfigured() ? 3 : 1.5),
     assemble: Math.ceil(scenes.length / RENDER_CONCURRENCY) * 4 + 4,
   });
   const emit = (stage: StageId, status: StageStatus, detail?: string, count?: { completed: number; total: number }) => {
@@ -237,15 +237,23 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
   })();
 
   const voiceTask = (async () => {
-    emit("voice", "active", `Recording ${plural(spoken, "line")}${voiceConfigured() ? " with ElevenLabs" : ""}`);
+    emit("voice", "active", `Recording ${plural(spoken, "line")}${voiceConfigured() ? " with ElevenLabs" : process.env.GEMINI_API_KEY ? " with Gemini" : ""}`);
     const clips = await mapLimit(scenes, 2, async (s) => {
       if (!s.voice.trim()) return null;
       const voice = await generateVoiceover(s.voice, dir, undefined, `voice_${s.id}`);
       return voice ? { ...voice, duration: (await probeDuration(voice.path)) ?? 0 } : null;
     });
     const made = clips.filter((c) => c !== null);
-    const provider: VoiceProvider = !made.length ? "silent" : made.every((c) => c.provider === "elevenlabs") ? "elevenlabs" : "system-tts";
-    if (provider === "elevenlabs") emit("voice", "done", `${plural(made.length, "line")} ready`);
+    // The weakest voice used names the render's voice.
+    const provider: VoiceProvider = !made.length
+      ? "silent"
+      : made.some((c) => c.provider === "system-tts")
+        ? "system-tts"
+        : made.some((c) => c.provider === "gemini-tts")
+          ? "gemini-tts"
+          : "elevenlabs";
+    if (provider === "elevenlabs" || (provider === "gemini-tts" && !voiceConfigured())) emit("voice", "done", `${plural(made.length, "line")} ready`);
+    else if (provider === "gemini-tts") emit("voice", "fallback", "ElevenLabs unavailable; using Gemini voice");
     else if (provider === "system-tts") emit("voice", "fallback", voiceConfigured() ? "ElevenLabs unavailable; using system voice" : "Using system voice (no ElevenLabs key)");
     else emit("voice", "fallback", spoken ? "No TTS available; music only" : "No voiceover lines");
     return { provider, clips };

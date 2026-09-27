@@ -14,6 +14,6 @@ export function GET() {
     video: video ?? (stockConfigured() ? "stock" : "local-motion"),
     assistant: assistantEngine(),
     storage: useBlob ? "blob" : "disk",
-    voice: voiceConfigured() ? "elevenlabs" : process.platform === "darwin" ? "system-tts" : "silent",
+    voice: voiceConfigured() ? "elevenlabs" : process.env.GEMINI_API_KEY ? "gemini-tts" : process.platform === "darwin" ? "system-tts" : "silent",
   });
 }

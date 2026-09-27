@@ -39,7 +39,7 @@ export interface ProgressEvent {
 }
 
 export type VideoProvider = "luma" | "replicate" | "gemini" | "stock" | "local-motion";
-export type VoiceProvider = "elevenlabs" | "system-tts" | "silent";
+export type VoiceProvider = "elevenlabs" | "gemini-tts" | "system-tts" | "silent";
 
 /** Where each scene sits in the rendered video. */
 export interface SceneTiming {

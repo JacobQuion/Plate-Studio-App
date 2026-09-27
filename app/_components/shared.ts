@@ -7,7 +7,8 @@ export type StageState = { status: StageStatus | "pending"; detail?: string; com
 export type GenState =
   | { phase: "idle" }
   /** eta: the server's latest estimate of seconds left, the most it may count down to before the next event, and when it arrived. */
-  | { phase: "running"; stages: Record<StageId, StageState>; startedAt: number; eta?: { seconds: number; floor: number; at: number } }
+  /** replayUntil: a saved render being replayed; progress runs evenly from startedAt to this time. */
+  | { phase: "running"; stages: Record<StageId, StageState>; startedAt: number; eta?: { seconds: number; floor: number; at: number }; replayUntil?: number }
   | { phase: "done"; stages: Record<StageId, StageState>; result: GenerateDoneEvent; elapsed: number }
   | { phase: "error"; stages: Record<StageId, StageState>; message: string };
 
