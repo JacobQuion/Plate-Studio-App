@@ -143,17 +143,23 @@ export function Studio({ id, initial, template }: { id: string; initial: Project
 
   // ---- Autosave ----------------------------------------------------------------
   // Saved to the server (and so the dashboard) shortly after each edit. Brand-new
-  // projects aren't saved until they have something in them.
+  // projects aren't saved until they have something in them, and ones opened from a
+  // template not until they differ from it, so just looking at a template adds no card.
   const latest = useRef({ project, library, messages });
   latest.current = { project, library, messages };
   const savedKey = useRef<string | null>(initial ? saveKey(initial.project, initial.library, (initial.messages ?? []) as unknown as ChatMessage[]) : null);
+  /** The untouched template's key: "pending" until the first save after it loads records it. */
+  const templateKey = useRef<string | null>(template ? "pending" : null);
   const saving = useRef<Promise<void>>(Promise.resolve());
-  const save = useCallback(() => {
+  /** `force` saves an untouched template too (rendering needs the project on the server). */
+  const save = useCallback((force = false) => {
     saving.current = saving.current.then(async () => {
       const { project: p, library: lib, messages: msgs } = latest.current;
       const key = saveKey(p, lib, msgs);
       if (key === savedKey.current) return;
       if (savedKey.current === null && !p.restaurant.trim() && !lib.length && !msgs.length) return;
+      if (savedKey.current === null && templateKey.current === "pending") templateKey.current = key;
+      if (savedKey.current === null && key === templateKey.current && !force) return;
       try {
         const res = await fetch(`/api/projects/${id}`, {
           method: "PUT",
@@ -210,7 +216,7 @@ export function Studio({ id, initial, template }: { id: string; initial: Project
 
     try {
       // Make sure the project exists on the server so the finished video is saved to it.
-      await save();
+      await save(true);
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
