@@ -55,19 +55,29 @@ function pcmToWav(pcm: Buffer, rate: number): Buffer {
 
 async function geminiTts(script: string, outPath: string): Promise<string> {
   const model = process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts";
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-    method: "POST",
-    headers: { "x-goog-api-key": process.env.GEMINI_API_KEY!, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: `Read this line from a restaurant ad, warm and upbeat: ${script}` }] }],
-      generationConfig: {
-        responseModalities: ["AUDIO"],
-        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: process.env.GEMINI_TTS_VOICE || "Charon" } } },
-      },
-    }),
-    signal: AbortSignal.timeout(45_000),
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: `Read this line from a restaurant ad, warm and upbeat: ${script}` }] }],
+    generationConfig: {
+      responseModalities: ["AUDIO"],
+      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: process.env.GEMINI_TTS_VOICE || "Charon" } } },
+    },
   });
-  if (!res.ok) throw new Error(`Gemini TTS failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+  // Per-minute limits (the free tier allows 3 lines a minute) say how long to wait: wait it out a couple of times.
+  let res: Response;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: "POST",
+      headers: { "x-goog-api-key": process.env.GEMINI_API_KEY!, "Content-Type": "application/json" },
+      body,
+      signal: AbortSignal.timeout(45_000),
+    });
+    if (res.ok) break;
+    const text = await res.text();
+    const wait = Number(/"retryDelay":\s*"(\d+(?:\.\d+)?)s"/.exec(text)?.[1]);
+    // A per-day limit won't clear by waiting.
+    if (res.status !== 429 || /PerDay/.test(text) || !wait || wait > 45 || attempt >= 3) throw new Error(`Gemini TTS failed (${res.status}): ${text.slice(0, 300)}`);
+    await new Promise((r) => setTimeout(r, (wait + 1) * 1000));
+  }
   const data = (await res.json()) as { candidates?: { content?: { parts?: { inlineData?: { mimeType: string; data: string } }[] } }[] };
   const audio = data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData)?.inlineData;
   if (!audio) throw new Error("Gemini TTS returned no audio");

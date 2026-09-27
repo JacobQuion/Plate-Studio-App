@@ -17,7 +17,7 @@ import {
   type LibraryDish,
   type Timeline as TimelineData,
 } from "@/lib/ad-plan";
-import { DEMOS, DEMO_RESTAURANTS, type DemoRestaurant } from "@/lib/demo-menus";
+import { DEMOS, DEMO_RESTAURANTS, demoForProject, type DemoRestaurant } from "@/lib/demo-menus";
 import type { ProjectRecord } from "@/lib/projects";
 import type { GenerateDoneEvent, GenerateStreamEvent, StageId } from "@/lib/types";
 import { ChatPane, type PendingPhoto } from "@/app/_components/ChatPane";
@@ -26,6 +26,7 @@ import { Preview } from "@/app/_components/Preview";
 import { InfoButton } from "@/app/_components/InfoButton";
 import { RenderStatus } from "@/app/_components/RenderStatus";
 import { Timeline } from "@/app/_components/Timeline";
+import { useDemoStatuses } from "@/app/_components/useDemoStatuses";
 import { fileToDataUri, freshStages, titleFromFilename, type ChatMessage, type GenState, type StageState } from "@/app/_components/shared";
 
 const SAMPLE_URL = "https://www.yelp.com/biz/caffe-strada-berkeley";
@@ -58,6 +59,8 @@ function restoredGen(initial: ProjectRecord | null): GenState {
 
 /** How long a demo's saved render takes to "render" again on each visit. */
 const REPLAY_MS = 6500;
+/** Roughly how long an example takes to render on the server, for its progress bar. */
+const DEMO_RENDER_MS = 90_000;
 
 /** The render stages at `f` (0..1) through a replayed render of `scenes` scenes. */
 function replayStages(f: number, scenes: number): Record<StageId, StageState> {
@@ -367,14 +370,47 @@ export function Studio({ id: routeId, initial, template, demo = false }: { id: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [template]);
 
-  // A demo that hasn't been rendered yet (or whose last render failed) renders as soon as it's loaded.
-  const autoRender = useRef(demo && !initial?.render);
+  // A demo without a video yet renders on the server (the dashboard usually started it already):
+  // show its progress, then load the finished project and play it.
+  const demoId = demoForProject(routeId)?.id;
+  const server = useDemoStatuses(demo && !initial?.render, demoId)?.[demoId ?? ""] ?? null;
+  const serverStartedAt = server?.status === "rendering" ? server.startedAt : null;
   useEffect(() => {
-    if (!autoRender.current || !hasDishes) return;
-    autoRender.current = false;
-    void render();
+    if (serverStartedAt === null) return;
+    const scenesCount = scenes.length;
+    const tick = () => {
+      const f = Math.min(0.97, (Date.now() - serverStartedAt) / DEMO_RENDER_MS);
+      setGen({ phase: "running", stages: replayStages(f, scenesCount), startedAt: serverStartedAt, replayUntil: serverStartedAt + DEMO_RENDER_MS });
+    };
+    tick();
+    const t = setInterval(tick, 500);
+    return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasDishes]);
+  }, [serverStartedAt]);
+  useEffect(() => {
+    if (server?.status === "failed") setGen({ phase: "error", stages: freshStages(), message: `The example couldn't render: ${server.error}. Retrying in a couple of minutes.` });
+    if (server?.status !== "ready") return;
+    let cancelled = false;
+    void (async () => {
+      const res = await fetch(`/api/projects/${routeId}`, { cache: "no-store" }).catch(() => null);
+      const record = res?.ok ? ((await res.json()) as ProjectRecord) : null;
+      if (cancelled || !record?.render) return;
+      const msgs = (record.messages ?? []) as unknown as ChatMessage[];
+      // The saved example is now the untouched version: editing it from here saves a copy.
+      savedKey.current = templateKey.current = saveKey(record.project, record.library, msgs);
+      setProject(record.project);
+      setLibrary(record.library);
+      setMessages(msgs);
+      setRenderedKey(record.render.editKey);
+      setGen(restoredGen(record));
+      setShowVideo(true);
+      setCurrentTime(0);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [server]);
 
   // A demo that has been rendered replays that render: the progress animation, then the video.
   useEffect(() => {

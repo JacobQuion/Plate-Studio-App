@@ -7,8 +7,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { TEMPLATES, demoProjectId } from "@/lib/demo-menus";
 import { PLATFORM_INFO, type Platform } from "@/lib/platforms";
+import type { DemoStatus } from "@/lib/demos";
 import type { ProjectSummary } from "@/lib/projects";
 import { PlatformIcon } from "./PlatformIcon";
+import { useDemoStatuses } from "./useDemoStatuses";
 import { cx, formatTime } from "./shared";
 
 const STATUS: Record<ProjectSummary["status"], { label: string; dot: string; title: string }> = {
@@ -106,6 +108,7 @@ export function Dashboard({ projects: initial }: { projects: ProjectSummary[] })
 
 /** "New project" plus the sample restaurants, as one 3×2 grid. Templates open their shared demo project. */
 function NewAd({ onPick }: { onPick: (template?: string) => void }) {
+  const demos = useDemoStatuses();
   return (
     <section>
       <h1 className="font-display text-2xl font-bold tracking-tight text-white sm:text-3xl mb-6">Make a new ad</h1>
@@ -124,24 +127,43 @@ function NewAd({ onPick }: { onPick: (template?: string) => void }) {
         </li>
         {TEMPLATES.map((t) => (
           <li key={t.id}>
-            <button onClick={() => onPick(t.id)} className="group block w-full rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
-              <div className="relative aspect-video overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/[0.08] transition group-hover:ring-white/20">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={t.imageUrl.replace("w=1600", "w=800")} alt="" loading="lazy" className="size-full object-cover transition duration-500 group-hover:scale-[1.03]" />
-                <span className="absolute top-2 left-2 rounded-full bg-black/65 px-2 py-1 text-[11px] font-medium text-zinc-100 backdrop-blur-md">Example</span>
-                <span className="absolute right-2 bottom-2 inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[12px] font-semibold text-zinc-950 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
-                  <Play className="size-3 fill-current" strokeWidth={3} /> Watch demo
-                </span>
-              </div>
-              <p className="mt-3 truncate text-[15px] font-semibold text-zinc-100">{t.name}</p>
-              <p className="mt-0.5 text-[13px] text-zinc-500">
-                {t.cuisine} · {t.detail}
-              </p>
-            </button>
+            <TemplateCard template={t} demo={demos?.[t.id]} onPick={() => onPick(t.id)} />
           </li>
         ))}
       </ul>
     </section>
+  );
+}
+
+/** One example, with its server-side render's status. */
+function TemplateCard({ template: t, demo, onPick }: { template: (typeof TEMPLATES)[number]; demo?: DemoStatus; onPick: () => void }) {
+  const badge: { dot: string; label: string; title?: string } =
+    demo?.status === "ready"
+      ? { dot: "bg-emerald-400", label: "Ready" }
+      : demo?.status === "failed"
+        ? { dot: "bg-amber-400", label: "Render failed, retrying soon", title: demo.error }
+        : demo?.status === "rendering"
+          ? { dot: "animate-pulse bg-brand-400", label: "Rendering…" }
+          : demo?.status === "queued"
+            ? { dot: "bg-zinc-400", label: "Up next" }
+            : { dot: "bg-zinc-400", label: "Example" };
+  return (
+    <button onClick={onPick} className="group block w-full rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+      <div className="relative aspect-video overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/[0.08] transition group-hover:ring-white/20">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={t.imageUrl.replace("w=1600", "w=800")} alt="" loading="lazy" className="size-full object-cover transition duration-500 group-hover:scale-[1.03]" />
+        <span title={badge.title} className="absolute top-2 left-2 inline-flex items-center gap-1.5 rounded-full bg-black/65 px-2 py-1 text-[11px] font-medium text-zinc-100 backdrop-blur-md">
+          <span className={cx("size-1.5 rounded-full", badge.dot)} /> {badge.label}
+        </span>
+        <span className="absolute right-2 bottom-2 inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[12px] font-semibold text-zinc-950 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+          <Play className="size-3 fill-current" strokeWidth={3} /> Watch demo
+        </span>
+      </div>
+      <p className="mt-3 truncate text-[15px] font-semibold text-zinc-100">{t.name}</p>
+      <p className="mt-0.5 text-[13px] text-zinc-500">
+        {t.cuisine} · {t.detail}
+      </p>
+    </button>
   );
 }
 

@@ -34,7 +34,7 @@ export function useRenderProgress(gen: GenState): RenderProgress | null {
 }
 
 function measure(gen: Extract<GenState, { phase: "running" }>, now: number): RenderProgress {
-  if (gen.replayUntil) return { fraction: Math.min(1, Math.max(0, (now - gen.startedAt) / (gen.replayUntil - gen.startedAt))) };
+  if (gen.replayUntil) return { fraction: Math.min(0.99, Math.max(0, (now - gen.startedAt) / (gen.replayUntil - gen.startedAt))) };
   const elapsed = Math.max(0, (now - gen.startedAt) / 1000);
   // Count down between events, but not past the point where the next scene or clip is due:
   // until it actually lands, the bar waits there instead of running ahead of the work.
