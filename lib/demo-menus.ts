@@ -5,6 +5,8 @@ import type { Dish } from "@/lib/types";
  * (Maps renders client-side and Yelp rate-limits aggressively), so the stage
  * demo never shows an empty grid. A menu is picked by cuisine keywords in the
  * restaurant name or URL.
+ *
+ * DEMO_RESTAURANTS are ready-made sample projects the studio can load in one click.
  */
 
 const img = (id: string) => `https://images.unsplash.com/photo-${id}?w=1600&q=80&auto=format&fit=crop`;
@@ -28,6 +30,33 @@ const MENUS: Record<string, Dish[]> = {
     { id: "am-3", title: "Crispy Chicken Bites", price: "$11.00", description: "Buttermilk-brined chicken, hot honey drizzle and ranch.", imageUrl: img("1562967914-608f82629710") },
     { id: "am-4", title: "Glazed Donut Stack", price: "$8.50", description: "Chocolate-glazed brioche donuts piled high with rainbow sprinkles.", imageUrl: img("1551024601-bec78aea704b") },
   ],
+  italian: [
+    { id: "it-1", title: "Spaghetti Carbonara", price: "$19.00", description: "Guanciale, egg yolk, pecorino romano and cracked black pepper, tossed to order.", imageUrl: img("1612874742237-6526221588e3") },
+    { id: "it-2", title: "Spaghetti alle Vongole", price: "$24.00", description: "Littleneck clams, white wine, garlic, chili and parsley.", imageUrl: img("1595295333158-4742f28fbd85") },
+    { id: "it-3", title: "Nonna's Sunday Ragù", price: "$22.00", description: "Spaghetti in a beef ragù slow-simmered for eight hours.", imageUrl: img("1551183053-bf91a1d81141") },
+    { id: "it-4", title: "Penne all'Arrabbiata", price: "$17.00", description: "San Marzano tomatoes, garlic and Calabrian chili with fresh basil.", imageUrl: img("1621996346565-e3dbc646d9a9") },
+    { id: "it-5", title: "Classic Tiramisu", price: "$10.00", description: "Espresso-soaked ladyfingers, whipped mascarpone and cocoa.", imageUrl: img("1571877227200-a0d98ea607e9") },
+  ],
+  mexican: [
+    { id: "mx-1", title: "Tacos al Pastor", price: "$13.50", description: "Spit-roasted adobo pork, grilled pineapple, onion and cilantro on corn tortillas.", imageUrl: img("1613514785940-daed07799d9b") },
+    { id: "mx-2", title: "Carne Asada Tacos", price: "$14.00", description: "Mesquite-grilled steak, fresh cilantro, white onion and salsa verde.", imageUrl: img("1599974579688-8dbdd335c77f") },
+    { id: "mx-3", title: "Baja Fish Tacos", price: "$14.50", description: "Beer-battered fish, avocado, pico de gallo and chipotle crema.", imageUrl: img("1565299585323-38d6b0865b47") },
+    { id: "mx-4", title: "Quesadilla Estrada", price: "$12.00", description: "Oaxaca cheese and chicken tinga pressed in a crisp flour tortilla.", imageUrl: img("1618040996337-56904b7850b9") },
+    { id: "mx-5", title: "Burrito de la Casa", price: "$15.00", description: "Grilled chicken, rice, black beans, slaw and salsa roja, wrapped to go.", imageUrl: img("1626700051175-6818013e1d4f") },
+  ],
+  ramen: [
+    { id: "rm-1", title: "Tonkotsu Ramen", price: "$17.00", description: "Eighteen-hour pork bone broth, chashu, ajitama egg and nori.", imageUrl: img("1557872943-16a5ac26437e") },
+    { id: "rm-2", title: "Spicy Miso Ramen", price: "$17.50", description: "Red miso broth with chili oil, roast pork and scallions.", imageUrl: img("1617093727343-374698b1b08d") },
+    { id: "rm-3", title: "Tantanmen", price: "$16.50", description: "Sesame broth, spicy ground pork, bok choy and a soft-boiled egg.", imageUrl: img("1591814468924-caf88d1232e1") },
+    { id: "rm-4", title: "Pan-Fried Gyoza", price: "$9.00", description: "Crisp-bottomed pork and cabbage dumplings with ponzu.", imageUrl: img("1534422298391-e4f8c172dddb") },
+  ],
+  burger: [
+    { id: "bg-1", title: "The Big Stack", price: "$8.99", description: "Flame-grilled beef, melted cheddar, lettuce, tomato and stack sauce on a toasted bun.", imageUrl: img("1571091718767-18b5b1457add") },
+    { id: "bg-2", title: "Bacon Cheeseburger", price: "$9.99", description: "Crispy bacon, double cheese and pickles on a sesame bun.", imageUrl: img("1586190848861-99aa4a171e90") },
+    { id: "bg-3", title: "Crispy Chicken Sandwich", price: "$8.49", description: "Buttermilk fried chicken, slaw and spicy mayo on brioche.", imageUrl: img("1606755962773-d324e0a13086") },
+    { id: "bg-4", title: "Golden Fries", price: "$3.49", description: "Hand-cut, twice-fried and salted the second they're out.", imageUrl: img("1630384060421-cb20d0e0649d") },
+    { id: "bg-5", title: "Cookies & Cream Shake", price: "$5.49", description: "Hand-spun vanilla soft serve blended with chocolate cookies.", imageUrl: img("1572490122747-3968b75cc699") },
+  ],
   cafe: [
     { id: "cf-1", title: "Iced Latte", price: "$5.75", description: "Double espresso poured over ice and cold whole milk.", imageUrl: img("1461023058943-07fcbe16d735") },
     { id: "cf-2", title: "House Cappuccino", price: "$4.95", description: "Rich espresso under silky steamed milk and rosetta latte art.", imageUrl: img("1572442388796-11668a67e53d") },
@@ -45,13 +74,42 @@ const MENUS: Record<string, Dish[]> = {
 };
 
 const KEYWORDS: [RegExp, keyof typeof MENUS][] = [
-  [/pizz|trattoria|italian|pasta|osteria/i, "pizza"],
-  [/ramen|sushi|poke|thai|pho|asian|japan|korean|izakaya|noodle/i, "asian"],
+  [/pizz/i, "pizza"],
+  [/spaghett|pasta|trattoria|italian|osteria|nonna/i, "italian"],
+  [/taco|taqueria|mexican|cantina|hacienda|burrito|estrada/i, "mexican"],
+  [/ramen|izakaya|noodle/i, "ramen"],
+  [/sushi|poke|thai|pho|asian|japan|korean/i, "asian"],
   [/caff?e|coffee|espresso|bakery|roaster/i, "cafe"],
-  [/burger|grill|diner|bbq|taco|wing|chicken|shack/i, "american"],
+  [/burger|fries|shake|drive.?in/i, "burger"],
+  [/grill|diner|bbq|wing|chicken|shack/i, "american"],
 ];
 
 export function demoMenuFor(hint: string): Dish[] {
   const match = KEYWORDS.find(([re]) => re.test(hint));
   return MENUS[match ? match[1] : "default"];
 }
+
+export interface DemoRestaurant {
+  id: string;
+  /** Short label for the sample button. */
+  label: string;
+  /** Kind of place, shown on the dashboard's template cards. */
+  cuisine: string;
+  name: string;
+  website: string;
+  cta: string;
+  dishes: Dish[];
+}
+
+export const DEMO_RESTAURANTS: DemoRestaurant[] = [
+  { id: "italian", label: "Spaghetti house", cuisine: "Italian spaghetti house", name: "Nonna Rosa's", website: "nonnarosas.com", cta: "Book a table", dishes: MENUS.italian },
+  { id: "mexican", label: "Hacienda Estrada", cuisine: "Mexican restaurant", name: "Hacienda Estrada", website: "haciendaestrada.com", cta: "Order now", dishes: MENUS.mexican },
+  { id: "ramen", label: "Ramen bar", cuisine: "Japanese ramen bar", name: "Kumo Ramen Bar", website: "kumoramen.com", cta: "Walk in tonight", dishes: MENUS.ramen },
+  { id: "burger", label: "Burger chain", cuisine: "Fast-food burger chain", name: "Big Stack Burgers", website: "bigstack.com", cta: "Order on the app", dishes: MENUS.burger },
+];
+
+/** Starting points offered on the dashboard. The café imports a real Yelp page through the assistant. */
+export const TEMPLATES: { id: string; name: string; cuisine: string; imageUrl: string; detail: string }[] = [
+  ...DEMO_RESTAURANTS.map((d) => ({ id: d.id, name: d.name, cuisine: d.cuisine, imageUrl: d.dishes[0].imageUrl, detail: `${d.dishes.length} dishes` })),
+  { id: "cafe", name: "Caffe Strada", cuisine: "Berkeley café", imageUrl: MENUS.cafe[1].imageUrl, detail: "Imported from Yelp" },
+];
