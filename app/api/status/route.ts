@@ -2,6 +2,7 @@ import { configuredVideoProvider } from "@/lib/providers/video";
 import { stockConfigured } from "@/lib/providers/stock";
 import { voiceConfigured } from "@/lib/providers/voice";
 import { assistantEngine } from "@/lib/assistant";
+import { useBlob } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +13,7 @@ export function GET() {
   return Response.json({
     video: video ?? (stockConfigured() ? "stock" : "local-motion"),
     assistant: assistantEngine(),
+    storage: useBlob ? "blob" : "disk",
     voice: voiceConfigured() ? "elevenlabs" : process.platform === "darwin" ? "system-tts" : "silent",
   });
 }
