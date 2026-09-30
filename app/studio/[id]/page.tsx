@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { demoForProject } from "@/lib/demo-menus";
+import { bundledDemo } from "@/lib/demo-records";
 import { getProject, hasVideo, isProjectId } from "@/lib/projects";
 import { Studio } from "./Studio";
 
@@ -22,10 +23,11 @@ export default async function StudioPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { template } = await searchParams;
   if (!isProjectId(id)) notFound();
-  const record = await getProject(id);
-  // Drop a render whose video file is gone, so the studio offers to render again.
-  if (record?.render && !(await hasVideo(record.render.jobId))) delete record.render;
   const demo = demoForProject(id)?.id;
+  // Examples ship with their video; otherwise the saved project.
+  const record = (demo && bundledDemo(demo)) || (await getProject(id));
+  // Drop a render whose video file is gone, so the studio offers to render again.
+  if (record?.render && !record.render.videoUrl && !(await hasVideo(record.render.jobId))) delete record.render;
   const start = demo ?? (typeof template === "string" ? template : undefined);
   return <Studio key={id} id={id} initial={record} template={record ? undefined : start} demo={!!demo} />;
 }
