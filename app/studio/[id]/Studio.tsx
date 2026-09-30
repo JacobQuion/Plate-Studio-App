@@ -50,8 +50,8 @@ const clampPanel = (w: number) => Math.round(Math.max(PANEL_MIN, Math.min(PANEL_
 function restoredGen(initial: ProjectRecord | null): GenState {
   const r = initial?.render;
   if (!r) return { phase: "idle" };
-  const { editKey: _key, renderedAt: _at, elapsed, ...rest } = r;
-  const result: GenerateDoneEvent = { type: "done", ...rest, videoUrl: `/api/video/${r.jobId}`, downloadUrl: `/api/video/${r.jobId}?download=1` };
+  const { editKey: _key, renderedAt: _at, elapsed, videoUrl, ...rest } = r;
+  const result: GenerateDoneEvent = { type: "done", ...rest, videoUrl: videoUrl ?? `/api/video/${r.jobId}`, downloadUrl: videoUrl ?? `/api/video/${r.jobId}?download=1` };
   const stages = freshStages();
   for (const k of Object.keys(stages) as (keyof typeof stages)[]) stages[k] = { status: "done" };
   return { phase: "done", stages, result, elapsed };
