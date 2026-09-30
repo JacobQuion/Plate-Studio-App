@@ -1,5 +1,6 @@
 import { editKey, newProject, setAdDishes } from "@/lib/ad-plan";
 import { DEMOS, demoProjectId, type DemoRestaurant } from "@/lib/demo-menus";
+import { bundledDemo } from "@/lib/demo-records";
 import { attachRender, getProject, saveProject, saveVideo } from "@/lib/projects";
 import { deleteObject, putObject, readObject } from "@/lib/storage";
 import { cloudVoiceConfigured } from "@/lib/providers/voice";
@@ -47,6 +48,7 @@ export function demoContent(demo: DemoRestaurant) {
 }
 
 async function currentStatus(demo: DemoRestaurant): Promise<DemoStatus | { status: "idle" }> {
+  if (bundledDemo(demo.id)) return { status: "ready" };
   // Trust the record's render: checking the video exists too would cost another storage call per poll.
   const record = await getProject(demoProjectId(demo.id));
   const now = Date.now();
