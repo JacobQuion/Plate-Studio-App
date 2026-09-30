@@ -42,6 +42,8 @@ export interface ProjectRender extends Omit<GenerateDoneEvent, "type" | "videoUr
   renderedAt: number;
   /** Seconds the render took. */
   elapsed: number;
+  /** Where to play it when it isn't in storage: an example's video shipped as a static file. */
+  videoUrl?: string;
 }
 
 export interface ProjectRecord {
