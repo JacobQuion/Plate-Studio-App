@@ -30,8 +30,6 @@ import { useDemoStatuses } from "@/app/_components/useDemoStatuses";
 import { fileToDataUri, freshStages, titleFromFilename, type ChatMessage, type GenState, type StageState } from "@/app/_components/shared";
 
 const SAMPLE_URL = "https://www.yelp.com/biz/caffe-strada-berkeley";
-/** The café sample imports a real Yelp page through the assistant; the rest are built in. */
-const SAMPLES = [{ id: "cafe", label: "Café" }, ...DEMO_RESTAURANTS.map(({ id, label }) => ({ id, label }))];
 
 type Snapshot = { project: AdProject; library: LibraryDish[] };
 
@@ -480,7 +478,7 @@ export function Studio({ id: routeId, initial, template, demo = false }: { id: s
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "The assistant is unavailable.");
+      if (!res.ok) throw new Error(data.error ?? "Plate Studio is unavailable.");
       const local = new Map(lib.map((d) => [d.id, d.imageUrl]));
       const merged: LibraryDish[] = (data.library as LibraryDish[]).map((d) => ({ ...d, imageUrl: d.imageUrl || local.get(d.id) || "" }));
       setProject(data.project);
@@ -597,7 +595,7 @@ export function Studio({ id: routeId, initial, template, demo = false }: { id: s
             value={project.restaurant}
             onChange={(e) => setProject((p) => ({ ...p, restaurant: e.target.value }))}
             disabled={editing}
-            placeholder="Blank project"
+            placeholder="New Project"
             aria-label="Restaurant name"
             className="field-sizing-content max-w-[40vw] min-w-24 truncate rounded-md bg-transparent px-1.5 py-1 text-[17px] leading-7 font-medium text-zinc-100 outline-none placeholder:text-zinc-500 hover:bg-white/[0.04] focus:bg-white/[0.06]"
           />
@@ -702,7 +700,6 @@ export function Studio({ id: routeId, initial, template, demo = false }: { id: s
                   gen={gen}
                   result={result}
                   showVideo={showVideo}
-                  busy={busy}
                   onVideoClick={() => {
                     const id = sceneAt(videoRef.current?.currentTime ?? 0);
                     if (id) setSelectedId(id);
@@ -715,8 +712,6 @@ export function Studio({ id: routeId, initial, template, demo = false }: { id: s
                   }}
                   onAddFiles={addFiles}
                   onLink={openLink}
-                  samples={SAMPLES}
-                  onSample={trySample}
                 />
               </div>
               <RenderStatus gen={gen} stale={stale} canRender={hasDishes && !busy} showVideo={showVideo} onRender={() => void render()} onShowVideo={setShowVideo} />
