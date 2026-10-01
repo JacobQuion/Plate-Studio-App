@@ -1,6 +1,6 @@
 "use client";
 
-import { ImagePlus, MapPin, Maximize2, Minimize2, Sparkles } from "lucide-react";
+import { ImagePlus, MapPin, Maximize2, Minimize2 } from "lucide-react";
 import { forwardRef, useEffect, useRef, useState } from "react";
 import type { ResolvedScene } from "@/lib/ad-plan";
 import type { GenerateDoneEvent } from "@/lib/types";
@@ -25,16 +25,12 @@ export const Preview = forwardRef<
     gen: GenState;
     result: GenerateDoneEvent | null;
     showVideo: boolean;
-    busy: boolean;
     onVideoClick: () => void;
     onTime: (t: number) => void;
     onAddFiles: (files: File[]) => void;
     onLink: () => void;
-    /** Sample projects offered on the empty stage. */
-    samples: { id: string; label: string }[];
-    onSample: (id: string) => void;
   }
->(function Preview({ scene, rendering, gen, result, showVideo, busy, onVideoClick, onTime, onAddFiles, onLink, samples, onSample }, videoRef) {
+>(function Preview({ scene, rendering, gen, result, showVideo, onVideoClick, onTime, onAddFiles, onLink }, videoRef) {
   const videoMode = !!result && showVideo && !rendering;
   const fileInput = useRef<HTMLInputElement>(null);
   const stage = useRef<HTMLDivElement>(null);
@@ -93,10 +89,7 @@ export const Preview = forwardRef<
           <SceneFrame scene={scene} />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-zinc-900 to-black p-6 text-center">
-            <div>
-              <p className="font-display text-xl font-bold text-white sm:text-2xl">Let&apos;s make your ad.</p>
-              <p className="mt-1 text-sm text-zinc-400">Start with photos of your food or your restaurant&apos;s page.</p>
-            </div>
+            <p className="font-display text-xl font-bold text-white sm:text-2xl">Let&apos;s create your ad.</p>
             <input
               ref={fileInput}
               type="file"
@@ -113,23 +106,8 @@ export const Preview = forwardRef<
                 <MapPin className="size-4" /> Yelp/Google Maps
               </button>
               <button onClick={() => fileInput.current?.click()} className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200">
-                <ImagePlus className="size-4" /> Upload dish photos
+                <ImagePlus className="size-4" /> Upload Media
               </button>
-            </div>
-            <div className="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
-              <span className="mr-0.5 inline-flex items-center gap-1.5 text-sm text-zinc-500">
-                <Sparkles className="size-3.5" /> Try a sample:
-              </span>
-              {samples.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => onSample(s.id)}
-                  disabled={busy}
-                  className="h-7 rounded-full px-2.5 text-[13px] text-zinc-400 ring-1 ring-white/10 transition hover:bg-white/[0.06] hover:text-white disabled:opacity-40"
-                >
-                  {s.label}
-                </button>
-              ))}
             </div>
           </div>
         )}
