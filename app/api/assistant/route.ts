@@ -46,6 +46,6 @@ export async function POST(req: Request) {
     return Response.json(result);
   } catch (err) {
     console.error("[assistant] failed:", err);
-    return Response.json({ error: "The assistant hit an error. Try again, or edit the ad directly below the video." }, { status: 502 });
+    return Response.json({ error: "Plate Studio hit an error. Try again, or edit the ad directly below the video." }, { status: 502 });
   }
 }
