@@ -84,6 +84,32 @@ const DETAIL_ITEMS: ContextItem[] = [
 ];
 const PREFILLS = new Set(DETAIL_ITEMS.map((c) => c.prefill));
 
+/** Placeholder suggestions the empty composer types out in turn. */
+const SUGGESTIONS = ["Paste a Yelp or Google Maps link", "Upload photos of your dishes"];
+
+/** Types each phrase out left to right, holds the whole phrase, then moves to the next. Paused while `active` is false. */
+function useTypewriter(phrases: string[], active: boolean) {
+  const [index, setIndex] = useState(0);
+  const [length, setLength] = useState(0);
+
+  useEffect(() => {
+    if (!active) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return setLength(phrases[index].length);
+    const done = length >= phrases[index].length;
+    const id = setTimeout(
+      () => {
+        if (!done) return setLength((l) => l + 1);
+        setLength(0);
+        setIndex((i) => (i + 1) % phrases.length);
+      },
+      done ? 2600 : 45,
+    );
+    return () => clearTimeout(id);
+  }, [active, phrases, index, length]);
+
+  return { key: index, text: phrases[index].slice(0, length), typing: length < phrases[index].length };
+}
+
 export function ChatPane({
   messages,
   busy,
@@ -131,14 +157,6 @@ export function ChatPane({
     });
   }, [messages.length, busy]);
 
-  // Grow the composer with its content, up to ~6 lines.
-  useEffect(() => {
-    const t = textarea.current;
-    if (!t) return;
-    t.style.height = "auto";
-    t.style.height = `${Math.min(t.scrollHeight, 160)}px`;
-  }, [draft]);
-
   useEffect(() => {
     if (linkRequest) setLinkOpen(true);
   }, [linkRequest]);
@@ -185,6 +203,9 @@ export function ChatPane({
       t?.setSelectionRange(next.length, next.length);
     });
   };
+
+  const showSuggestion = !draft && !pending.length;
+  const suggestion = useTypewriter(SUGGESTIONS, showSuggestion);
 
   const lastAssistant = messages.findLast((m) => m.role === "assistant")?.id;
   const full = inAd.length >= MAX_AD_DISHES;
@@ -254,38 +275,33 @@ export function ChatPane({
       {/* Composer ------------------------------------------------------------ */}
       <div className="shrink-0 px-4 pt-2 pb-4">
         <div className="accent-ring relative rounded-2xl border border-white/10 bg-white/[0.03] transition focus-within:border-white/20">
-          {/* Chips: add sources, then every known dish (tap to put it in the ad or take it out) */}
-          <div className="flex gap-1.5 overflow-x-auto px-3 pt-3 [scrollbar-width:none]">
-            <Chip onClick={() => setLinkOpen(true)} active={linkOpen}>
-              <MapPin className="size-3.5" /> Yelp/Google Maps
-            </Chip>
-            <Chip onClick={() => fileInput.current?.click()}>
-              <ImagePlus className="size-3.5" /> Media
-            </Chip>
-            {library.length > 0 && <span className="mx-0.5 w-px shrink-0 self-stretch bg-white/10" />}
-            {library.map((d) => {
-              const position = inAd.indexOf(d.id);
-              const selected = position >= 0;
-              return (
-                <Chip
-                  key={d.id}
-                  onClick={() => onToggleDish(d.id)}
-                  active={selected}
-                  disabled={dishesDisabled || (!selected && full)}
-                  title={selected ? "Remove from ad" : full ? `Your ad already has ${MAX_AD_DISHES} dishes` : "Add to ad"}
-                >
-                  {d.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={d.imageUrl} alt="" referrerPolicy="no-referrer" className="-ml-1.5 size-5 rounded-full object-cover" />
-                  ) : (
-                    <UtensilsCrossed className="size-3.5 text-zinc-500" />
-                  )}
-                  <span className="max-w-32 truncate">{d.title || "Untitled dish"}</span>
-                  {selected ? <Check className="accent-text size-3.5 text-brand-400" /> : <Plus className="size-3.5 text-zinc-500" />}
-                </Chip>
-              );
-            })}
-          </div>
+          {/* Chips: every known dish (tap to put it in the ad or take it out) */}
+          {library.length > 0 && (
+            <div className="flex gap-1.5 overflow-x-auto px-3 pt-3 [scrollbar-width:none]">
+              {library.map((d) => {
+                const position = inAd.indexOf(d.id);
+                const selected = position >= 0;
+                return (
+                  <Chip
+                    key={d.id}
+                    onClick={() => onToggleDish(d.id)}
+                    active={selected}
+                    disabled={dishesDisabled || (!selected && full)}
+                    title={selected ? "Remove from ad" : full ? `Your ad already has ${MAX_AD_DISHES} dishes` : "Add to ad"}
+                  >
+                    {d.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={d.imageUrl} alt="" referrerPolicy="no-referrer" className="-ml-1.5 size-5 rounded-full object-cover" />
+                    ) : (
+                      <UtensilsCrossed className="size-3.5 text-zinc-500" />
+                    )}
+                    <span className="max-w-32 truncate">{d.title || "Untitled dish"}</span>
+                    {selected ? <Check className="accent-text size-3.5 text-brand-400" /> : <Plus className="size-3.5 text-zinc-500" />}
+                  </Chip>
+                );
+              })}
+            </div>
+          )}
 
           {pending.length > 0 && (
             <div className="flex flex-wrap gap-2 px-3 pt-3">
@@ -342,20 +358,38 @@ export function ChatPane({
                 e.target.value = "";
               }}
             />
-            <textarea
-              ref={textarea}
-              value={draft}
-              rows={1}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  send();
-                }
-              }}
-              placeholder={pending.length ? "Add a note about these photos (optional)" : "Ask anything…"}
-              className="block min-w-0 flex-1 resize-none self-center bg-transparent py-2 text-[15px] text-white outline-none placeholder:text-zinc-500"
-            />
+            {/* Textarea and suggestion share one grid cell; the composer keeps a fixed height (its top lines up with the timeline's) and long drafts scroll. */}
+            <div className="grid min-w-0 flex-1" onClick={() => textarea.current?.focus()}>
+              <textarea
+                ref={textarea}
+                value={draft}
+                rows={1}
+                aria-label="Message Plate Studio"
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    send();
+                  }
+                }}
+                placeholder={pending.length ? "Add a note about these photos (optional)" : ""}
+                className="col-start-1 row-start-1 block h-[67px] w-full resize-none bg-transparent py-2 text-[15px] text-white outline-none placeholder:text-zinc-500"
+              />
+              <AnimatePresence initial={false}>
+                {showSuggestion && (
+                  <motion.span
+                    key={suggestion.key}
+                    aria-hidden
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="pointer-events-none col-start-1 row-start-1 py-2 text-[15px] leading-normal text-zinc-500"
+                  >
+                    {suggestion.text}
+                    <span className={cx("ml-px inline-block h-[1.1em] w-px translate-y-[3px] bg-zinc-500", !suggestion.typing && "animate-pulse")} />
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </div>
             <button
               onClick={() => send()}
               disabled={busy || (!draft.trim() && !pending.length)}
