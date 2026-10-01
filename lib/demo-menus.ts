@@ -37,6 +37,14 @@ const MENUS: Record<string, Dish[]> = {
     { id: "it-4", title: "Penne all'Arrabbiata", price: "$17.00", description: "San Marzano tomatoes, garlic and Calabrian chili with fresh basil.", imageUrl: img("1621996346565-e3dbc646d9a9") },
     { id: "it-5", title: "Classic Tiramisu", price: "$10.00", description: "Espresso-soaked ladyfingers, whipped mascarpone and cocoa.", imageUrl: img("1571877227200-a0d98ea607e9") },
   ],
+  // Imported from yelp.com/menu/the-cheesecake-factory-san-francisco-12, photos included.
+  cheesecake: [
+    { id: "cc-1", title: "Avocado Eggrolls", price: "$18.95", description: "Avocado, Sun-Dried Tomato, Red Onion and Cilantro Fried in a Crisp Wrapper. Served with a Tamarind-Cashew Dipping Sauce", imageUrl: "https://s3-media0.fl.yelpcdn.com/bphoto/rdTCSUQsR_EVBU9Tb2xgYA/o.jpg" },
+    { id: "cc-2", title: "Chicken Madeira", price: "$29.95", description: "Our most popular chicken dish! Sauteed Chicken Breast Topped with Fresh Asparagus and Melted Mozzarella Cheese. Covered with Fresh Mushroom Madeira Sauce and Served with Mashed Potatoes", imageUrl: "https://s3-media0.fl.yelpcdn.com/bphoto/RclAY9BH5VMcVi3iT0e2OA/o.jpg" },
+    { id: "cc-3", title: "Louisiana Chicken Pasta", price: "$29.95", description: "Parmesan Crusted Chicken Served Over Pasta with Mushrooms, Peppers and Onions in a Spicy New Orleans Sauce", imageUrl: "https://s3-media0.fl.yelpcdn.com/bphoto/RSXfD1tbGYPwzzghGZBwsg/o.jpg" },
+    { id: "cc-4", title: "Fried Macaroni and Cheese", price: "$19.50", description: "Crispy Crumb Coated Macaroni and Cheese Balls. Served over a Creamy Marinara Sauce", imageUrl: "https://s3-media0.fl.yelpcdn.com/bphoto/Rro1t0qsTkpJZq8BTlXJfw/o.jpg" },
+    { id: "cc-5", title: "Fresh Strawberry Cheesecake", price: "", description: "The Original Topped with Glazed Fresh Strawberries. Our Most Popular Flavor for over 45 Years!", imageUrl: "https://s3-media0.fl.yelpcdn.com/bphoto/DYiHWLa15aJ9zJHfAgC8CQ/o.jpg" },
+  ],
   mexican: [
     { id: "mx-1", title: "Tacos al Pastor", price: "$13.50", description: "Spit-roasted adobo pork, grilled pineapple, onion and cilantro on corn tortillas.", imageUrl: img("1613514785940-daed07799d9b") },
     { id: "mx-2", title: "Carne Asada Tacos", price: "$14.00", description: "Mesquite-grilled steak, fresh cilantro, white onion and salsa verde.", imageUrl: img("1599974579688-8dbdd335c77f") },
@@ -102,7 +110,7 @@ export interface DemoRestaurant {
 }
 
 export const DEMO_RESTAURANTS: DemoRestaurant[] = [
-  { id: "italian", label: "Spaghetti house", cuisine: "Italian spaghetti house", name: "Nonna Rosa's", website: "nonnarosas.com", cta: "Book a table", dishes: MENUS.italian },
+  { id: "italian", label: "Cheesecake Factory", cuisine: "American comfort food & dessert", name: "The Cheesecake Factory", website: "thecheesecakefactory.com", cta: "Book a table", dishes: MENUS.cheesecake },
   { id: "mexican", label: "Hacienda Estrada", cuisine: "Mexican restaurant", name: "Hacienda Estrada", website: "haciendaestrada.com", cta: "Order now", dishes: MENUS.mexican },
   { id: "ramen", label: "Ramen bar", cuisine: "Japanese ramen bar", name: "Kumo Ramen Bar", website: "kumoramen.com", cta: "Walk in tonight", dishes: MENUS.ramen },
   { id: "burger", label: "Burger chain", cuisine: "Fast-food burger chain", name: "Big Stack Burgers", website: "bigstack.com", cta: "Order on the app", dishes: MENUS.burger },
@@ -122,8 +130,11 @@ export const DEMO_PREFIX = "demo-";
 export const demoProjectId = (demoId: string) => `${DEMO_PREFIX}${demoId}`;
 export const demoForProject = (projectId: string) => (projectId.startsWith(DEMO_PREFIX) ? DEMOS.find((d) => demoProjectId(d.id) === projectId) : undefined);
 
+/** Demos featured on the dashboard; the rest still open by link. */
+const FEATURED = ["italian", "ramen"];
+
 /** Starting points offered on the dashboard. */
-export const TEMPLATES: { id: string; name: string; cuisine: string; imageUrl: string; detail: string }[] = DEMOS.map((d) => ({
+export const TEMPLATES: { id: string; name: string; cuisine: string; imageUrl: string; detail: string }[] = DEMOS.filter((d) => FEATURED.includes(d.id)).map((d) => ({
   id: d.id,
   name: d.name,
   cuisine: d.cuisine,
