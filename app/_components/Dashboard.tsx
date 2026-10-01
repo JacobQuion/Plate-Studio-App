@@ -111,23 +111,22 @@ function NewAd({ onPick }: { onPick: (template?: string) => void }) {
   const demos = useDemoStatuses();
   return (
     <section>
-      <h1 className="font-display text-2xl font-bold tracking-tight text-white sm:text-3xl mb-6">Make a new ad</h1>
+      <h1 className="font-display text-2xl font-bold tracking-tight text-white sm:text-3xl mb-6">Project Library</h1>
       <ul className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
         <li>
-          <button
-            onClick={() => onPick()}
-            className="group flex aspect-video w-full flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed border-white/15 text-zinc-400 transition hover:border-brand-500/70 hover:bg-brand-500/[0.04] hover:text-white"
-          >
-            <span className="flex size-11 items-center justify-center rounded-full bg-white/[0.06] transition group-hover:bg-brand-500">
-              <Plus className="size-5" />
-            </span>
-            <span className="text-[15px] font-semibold">New project</span>
-            <span className="-mt-1.5 text-[13px] text-zinc-500">Your photos or your Yelp / Google Maps page</span>
+          <button onClick={() => onPick()} className="group block w-full rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+            <div className="flex aspect-video w-full items-center justify-center rounded-xl border border-dashed border-white/15 text-zinc-400 transition group-hover:border-brand-500/70 group-hover:bg-brand-500/[0.04] group-hover:text-white">
+              <span className="flex size-11 items-center justify-center rounded-full bg-white/[0.06] transition group-hover:bg-brand-500">
+                <Plus className="size-5" />
+              </span>
+            </div>
+            <p className="mt-3 truncate text-[15px] font-semibold text-zinc-100">New Video</p>
+            <p className="mt-0.5 text-[13px] text-zinc-500">Start from scratch</p>
           </button>
         </li>
-        {TEMPLATES.map((t) => (
+        {TEMPLATES.map((t, i) => (
           <li key={t.id}>
-            <TemplateCard template={t} demo={demos?.[t.id]} onPick={() => onPick(t.id)} />
+            <TemplateCard template={t} n={i + 1} demo={demos?.[t.id]} onPick={() => onPick(t.id)} />
           </li>
         ))}
       </ul>
@@ -136,7 +135,7 @@ function NewAd({ onPick }: { onPick: (template?: string) => void }) {
 }
 
 /** One example, with its server-side render's status. */
-function TemplateCard({ template: t, demo, onPick }: { template: (typeof TEMPLATES)[number]; demo?: DemoStatus; onPick: () => void }) {
+function TemplateCard({ template: t, n, demo, onPick }: { template: (typeof TEMPLATES)[number]; n: number; demo?: DemoStatus; onPick: () => void }) {
   const badge: { dot: string; label: string; title?: string } =
     demo?.status === "ready"
       ? { dot: "bg-emerald-400", label: "Ready" }
@@ -150,8 +149,7 @@ function TemplateCard({ template: t, demo, onPick }: { template: (typeof TEMPLAT
   return (
     <button onClick={onPick} className="group block w-full rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
       <div className="relative aspect-video overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/[0.08] transition group-hover:ring-white/20">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={t.imageUrl.replace("w=1600", "w=800")} alt="" loading="lazy" className="size-full object-cover transition duration-500 group-hover:scale-[1.03]" />
+        <PreviewLoop src={`/demos/${t.id}.mp4`} poster={t.imageUrl.replace("w=1600", "w=800")} />
         <span title={badge.title} className="absolute top-2 left-2 inline-flex items-center gap-1.5 rounded-full bg-black/65 px-2 py-1 text-[11px] font-medium text-zinc-100 backdrop-blur-md">
           <span className={cx("size-1.5 rounded-full", badge.dot)} /> {badge.label}
         </span>
@@ -159,11 +157,45 @@ function TemplateCard({ template: t, demo, onPick }: { template: (typeof TEMPLAT
           <Play className="size-3 fill-current" strokeWidth={3} /> Watch demo
         </span>
       </div>
-      <p className="mt-3 truncate text-[15px] font-semibold text-zinc-100">{t.name}</p>
-      <p className="mt-0.5 text-[13px] text-zinc-500">
-        {t.cuisine} · {t.detail}
+      <p className="mt-3 truncate text-[15px] font-semibold text-zinc-100">
+        Example {n}: {t.name}
       </p>
+      <p className="mt-0.5 text-[13px] text-zinc-500">{t.cuisine}</p>
     </button>
+  );
+}
+
+/** Where the preview loop starts (past the fade-in from black) and ends (once the first dish is on screen). */
+const LOOP_START = 0.6;
+const LOOP_END = 6;
+
+/** The demo's opening seconds on a muted loop, or its photo if the video can't play. */
+function PreviewLoop({ src, poster }: { src: string; poster: string }) {
+  const [failed, setFailed] = useState(false);
+  const cls = "size-full object-cover transition duration-500 group-hover:scale-[1.03]";
+  if (failed) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={poster} alt="" loading="lazy" className={cls} />;
+  }
+  return (
+    <video
+      src={`${src}#t=${LOOP_START}`}
+      poster={poster}
+      autoPlay
+      muted
+      playsInline
+      preload="auto"
+      onTimeUpdate={(e) => {
+        const v = e.currentTarget;
+        if (v.currentTime >= LOOP_END) v.currentTime = LOOP_START;
+      }}
+      onEnded={(e) => {
+        e.currentTarget.currentTime = LOOP_START;
+        void e.currentTarget.play();
+      }}
+      onError={() => setFailed(true)}
+      className={cls}
+    />
   );
 }
 
