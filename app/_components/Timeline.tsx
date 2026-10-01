@@ -96,7 +96,7 @@ export function Timeline({
           <InfoButton
             label="About the timeline"
             side="top"
-            items={[{ title: "Section slider", text: "Drag the handles to pick part of the ad, and the assistant will only edit that section." }]}
+            items={[{ title: "Section slider", text: "Drag the handles to pick part of the ad, and Plate Studio will only edit that section." }]}
           />
         </div>
         <div className="relative min-w-0 flex-1">
@@ -157,7 +157,7 @@ export function Timeline({
             <span className="accent-text font-mono text-brand-400 tabular-nums">
               {clock(start)}–{clock(end)}
             </span>{" "}
-            · The assistant will edit {inRange.map((s) => (s.kind === "dish" ? s.headline || "Untitled dish" : s.kind === "intro" ? "the intro" : "the end card")).join(", ")}
+            · Plate Studio will edit {inRange.map((s) => (s.kind === "dish" ? s.headline || "Untitled dish" : s.kind === "intro" ? "the intro" : "the end card")).join(", ")}
           </span>
           <button onClick={() => onRange(null)} className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-zinc-400 transition hover:bg-white/[0.06] hover:text-white">
             <X className="size-3" /> Clear
