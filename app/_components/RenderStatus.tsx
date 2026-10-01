@@ -56,7 +56,7 @@ export function RenderStatus({
     return (
       <Row>
         <span className="flex items-center gap-2 text-zinc-300">
-          <Check className="size-4 text-emerald-400" /> Your video is ready. Ask the assistant to change anything.
+          <Check className="size-4 text-emerald-400" /> Your video is ready. Ask Plate Studio to change anything.
         </span>
       </Row>
     );
