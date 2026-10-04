@@ -48,6 +48,8 @@ export interface ProjectRender extends Omit<GenerateDoneEvent, "type" | "videoUr
 
 export interface ProjectRecord {
   id: string;
+  /** The account that made it (lib/auth.ts). Examples and projects from before sign-in have none. */
+  ownerId?: string;
   createdAt: number;
   updatedAt: number;
   project: AdProject;
@@ -125,15 +127,29 @@ export function sanitizeMessages(raw: unknown): StoredMessage[] {
   });
 }
 
-/** Save the editor's state. Render and publish history are owned by the server and kept. */
-export async function saveProject(id: string, input: { project: unknown; library: unknown; messages: unknown }): Promise<ProjectRecord> {
-  const record = await mutate(id, (r) => ({
-    ...r,
-    updatedAt: Date.now(),
-    project: sanitizeProject(input.project),
-    library: sanitizeLibrary(input.library, 12 * 1024 * 1024),
-    messages: sanitizeMessages(input.messages),
-  }));
+/** Whether `userId` may open and change a project: their own, an example, or one saved before accounts existed. */
+export const canAccess = (record: ProjectRecord | null, userId: string) => !record || record.id.startsWith(DEMO_PREFIX) || !record.ownerId || record.ownerId === userId;
+
+/** Someone else's project. */
+export class ProjectAccessError extends Error {}
+
+/**
+ * Save the editor's state. Render and publish history are owned by the server and kept.
+ * `userId` is who's saving; null is the server itself, which only saves the examples.
+ */
+export async function saveProject(id: string, input: { project: unknown; library: unknown; messages: unknown }, userId: string | null): Promise<ProjectRecord> {
+  const record = await mutate(id, (r) => {
+    if (userId === null ? !id.startsWith(DEMO_PREFIX) : !canAccess(r, userId)) throw new ProjectAccessError("Not your project");
+    return {
+      ...r,
+      // Whoever saves a project first owns it; the shared examples stay nobody's.
+      ownerId: r.ownerId ?? (id.startsWith(DEMO_PREFIX) ? undefined : (userId ?? undefined)),
+      updatedAt: Date.now(),
+      project: sanitizeProject(input.project),
+      library: sanitizeLibrary(input.library, 12 * 1024 * 1024),
+      messages: sanitizeMessages(input.messages),
+    };
+  });
   if (!record.render) await refreshPhotoThumb(record).catch((err) => console.warn("[projects] thumbnail failed:", (err as Error).message));
   return record;
 }
@@ -261,10 +277,10 @@ export async function summarize(record: ProjectRecord): Promise<ProjectSummary> 
   };
 }
 
-/** Every saved project, most recently edited first. The shared example projects aren't anyone's, so they're left out. */
-export async function listProjects(): Promise<ProjectSummary[]> {
+/** The user's saved projects, most recently edited first. The shared example projects aren't anyone's, so they're left out. */
+export async function listProjects(userId: string): Promise<ProjectSummary[]> {
   const ids = await listFolders("projects/");
-  const records = (await Promise.all(ids.filter((id) => isProjectId(id) && !id.startsWith(DEMO_PREFIX)).map(getProject))).filter((r): r is ProjectRecord => !!r);
+  const records = (await Promise.all(ids.filter((id) => isProjectId(id) && !id.startsWith(DEMO_PREFIX)).map(getProject))).filter((r): r is ProjectRecord => !!r && r.ownerId === userId);
   const summaries = await Promise.all(records.map(summarize));
   return summaries.sort((a, b) => b.updatedAt - a.updatedAt);
 }
