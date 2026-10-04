@@ -438,8 +438,10 @@ export function decodeConnection(value: string | undefined): Connection | null {
 
 export const cookieOptions = (secure: boolean) => ({ httpOnly: true, sameSite: "lax" as const, secure, path: "/", maxAge: 60 * 60 * 24 * 365 });
 
-/** Where OAuth providers send the user back. PUBLIC_URL overrides the request origin (needed behind proxies and tunnels). */
+/** Base URL OAuth redirects use. PUBLIC_URL overrides the request origin (needed behind proxies and tunnels). */
+export const publicOrigin = (req: Request) => process.env.PUBLIC_URL?.replace(/\/+$/, "") || new URL(req.url).origin;
+
+/** Where OAuth providers send the user back. */
 export function redirectUri(req: Request, p: Platform) {
-  const origin = process.env.PUBLIC_URL?.replace(/\/+$/, "") || new URL(req.url).origin;
-  return `${origin}/api/connect/${p}/callback`;
+  return `${publicOrigin(req)}/api/connect/${p}/callback`;
 }
