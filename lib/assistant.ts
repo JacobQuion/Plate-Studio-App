@@ -14,6 +14,7 @@ import {
   type LibraryDish,
   type Scene,
 } from "@/lib/ad-plan";
+import { FONT_CHOICES, isFontFamily } from "@/lib/fonts";
 import { MenuImportError, findMenuLink, importMenu } from "@/lib/menu-import";
 
 /**
@@ -90,7 +91,7 @@ export class Workspace {
     );
     const inAd = new Set(dishScenes(this.project).map((s) => s.dishId));
     return JSON.stringify({
-      brand: { restaurant: this.project.restaurant, cta: this.project.cta, website: this.project.website, music: this.project.music, lifestyle_shots: this.project.lifestyle },
+      brand: { restaurant: this.project.restaurant, cta: this.project.cta, website: this.project.website, font: this.project.font ?? "auto (matches the website)", music: this.project.music, lifestyle_shots: this.project.lifestyle },
       estimated_total_seconds: timeline.total,
       scenes: scenes.map((s, i) => ({
         scene_id: s.id,
@@ -135,12 +136,19 @@ export class Workspace {
     return { restaurant: menu.restaurant, source: menu.source, note: menu.note, added: added.map((d) => ({ dish_id: d.id, title: d.title, price: d.price })) };
   }
 
-  setBrand(input: { restaurant?: string; cta?: string; website?: string; music?: boolean; lifestyle_shots?: boolean }) {
+  setBrand(input: { restaurant?: string; cta?: string; website?: string; font?: string; music?: boolean; lifestyle_shots?: boolean }) {
     const p = { ...this.project };
     const changed: string[] = [];
     if (typeof input.restaurant === "string") (p.restaurant = input.restaurant.slice(0, 60)), changed.push("name");
     if (typeof input.cta === "string") (p.cta = input.cta.slice(0, 24)), changed.push("call to action");
     if (typeof input.website === "string") (p.website = input.website.slice(0, 80)), changed.push("website");
+    if (typeof input.font === "string") {
+      const font = input.font.trim();
+      if (font && !isFontFamily(font)) return { ok: false, error: "font must be a Google Fonts family name, e.g. 'Playfair Display'" };
+      if (font && font.toLowerCase() !== "auto") p.font = font;
+      else delete p.font;
+      changed.push("font");
+    }
     if (typeof input.music === "boolean") (p.music = input.music), changed.push(input.music ? "music on" : "music off");
     if (typeof input.lifestyle_shots === "boolean") (p.lifestyle = input.lifestyle_shots), changed.push(input.lifestyle_shots ? "cooking & diner shots on" : "cooking & diner shots off");
     this.project = p;
@@ -207,13 +215,17 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
   },
   {
     name: "set_brand",
-    description: "Update brand-wide settings: restaurant name, call-to-action text (end card button + closing voice line), website shown on the end card, background music, and lifestyle_shots (AI-generated shots of each dish being cooked, plated and eaten, plus a kitchen shot in the intro and friends toasting behind the end card; rendered with an AI video key, where each shot is a paid generation, or from free stock footage with a Pexels key).",
+    description: "Update brand-wide settings: restaurant name, call-to-action text (end card button + closing voice line), website shown on the end card, font of the restaurant name, background music, and lifestyle_shots (AI-generated shots of each dish being cooked, plated and eaten, plus a kitchen shot in the intro and friends toasting behind the end card; rendered with an AI video key, where each shot is a paid generation, or from free stock footage with a Pexels key).",
     input_schema: {
       type: "object",
       properties: {
         restaurant: { type: "string" },
         cta: { type: "string", description: "Max 24 characters, e.g. 'Book a table'" },
         website: { type: "string" },
+        font: {
+          type: "string",
+          description: `Google Fonts family for the restaurant name on the intro and end card, to match the restaurant's branding (e.g. ${FONT_CHOICES.slice(1, 6).map((f) => `'${f.family}'`).join(", ")}). "auto" goes back to matching the website's font.`,
+        },
         music: { type: "boolean" },
         lifestyle_shots: { type: "boolean" },
       },
