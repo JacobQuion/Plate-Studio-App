@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { isPlatform, PLATFORM_INFO, type Privacy } from "@/lib/platforms";
-import { isProjectId, recordPublish, videoFile } from "@/lib/projects";
+import { currentUserId } from "@/lib/auth";
+import { canAccess, getProject, isProjectId, recordPublish, videoFile } from "@/lib/projects";
 import { connectionCookie, cookieOptions, decodeConnection, encodeConnection, freshConnection, platformConfigured, publishVideo } from "@/lib/publish";
 
 export const runtime = "nodejs";
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
     const connection = await freshConnection(platform, saved);
     if (connection !== saved) jar.set(connectionCookie(platform), encodeConnection(connection), cookieOptions(req.url.startsWith("https:")));
     const result = await publishVideo(platform, connection, file, { title: str(body.title, 200), caption: str(body.caption, 5000), tags, privacy });
-    if (typeof projectId === "string" && isProjectId(projectId)) {
+    if (typeof projectId === "string" && isProjectId(projectId) && canAccess(await getProject(projectId), (await currentUserId()) ?? "")) {
       await recordPublish(projectId, { platform, url: result.url, at: Date.now(), jobId }).catch((err) => console.warn("[publish] couldn't record:", err));
     }
     return Response.json(result);
