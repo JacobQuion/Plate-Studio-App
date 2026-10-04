@@ -1,6 +1,6 @@
 # **Plate Studio**
 
-<img width="1512" height="774" alt="Plate Studio editor" src="PASTE_SCREENSHOT_LINK_HERE" />
+<img width="1568" height="779" alt="image" src="https://github.com/user-attachments/assets/fb0642a9-970c-4379-bca6-c45f1de13269" />
 
 ## 
 Small restaurants rarely have the time or budget to film a video ad. Plate Studio turns a Google Maps or Yelp link and a few phone photos of your dishes into a finished, voiced and scored ad you can publish anywhere. The hardest part was building a full video pipeline that still renders a polished ad even when an AI service fails or runs out of credits. Check out the [landing page](https://github.com/JacobQuion/Plate-Studio-Landing) built to market it.
