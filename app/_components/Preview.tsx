@@ -3,7 +3,9 @@
 import { ImagePlus, MapPin, Maximize2, Minimize2 } from "lucide-react";
 import { forwardRef, useEffect, useRef, useState } from "react";
 import type { ResolvedScene } from "@/lib/ad-plan";
+import { DEFAULT_FONT, googleFontsCss } from "@/lib/fonts";
 import type { GenerateDoneEvent } from "@/lib/types";
+import { fontStack } from "./FontPicker";
 import { RenderingOverlay } from "./RenderingOverlay";
 import { cx, type GenState } from "./shared";
 
@@ -21,6 +23,8 @@ export const Preview = forwardRef<
   HTMLVideoElement,
   {
     scene: ResolvedScene | null;
+    /** Brand font for the restaurant name (see FontPicker). */
+    font?: string;
     rendering: boolean;
     gen: GenState;
     result: GenerateDoneEvent | null;
@@ -30,7 +34,7 @@ export const Preview = forwardRef<
     onAddFiles: (files: File[]) => void;
     onLink: () => void;
   }
->(function Preview({ scene, rendering, gen, result, showVideo, onVideoClick, onTime, onAddFiles, onLink }, videoRef) {
+>(function Preview({ scene, font, rendering, gen, result, showVideo, onVideoClick, onTime, onAddFiles, onLink }, videoRef) {
   const videoMode = !!result && showVideo && !rendering;
   const fileInput = useRef<HTMLInputElement>(null);
   const stage = useRef<HTMLDivElement>(null);
@@ -86,7 +90,7 @@ export const Preview = forwardRef<
             className="absolute inset-0 size-full bg-black object-contain"
           />
         ) : scene ? (
-          <SceneFrame scene={scene} />
+          <SceneFrame scene={scene} font={font} />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-zinc-900 to-black p-6 text-center">
             <p className="font-display text-xl font-bold text-white sm:text-2xl">Let&apos;s create your ad.</p>
@@ -132,11 +136,16 @@ export const Preview = forwardRef<
 // HTML mock of one scene (sizes mirror lib/overlays.ts at 1920px = 100cqw)
 // ---------------------------------------------------------------------------
 
-function SceneFrame({ scene }: { scene: ResolvedScene }) {
+function SceneFrame({ scene, font }: { scene: ResolvedScene; font?: string }) {
   const img = scene.imageUrl;
+  // Like the renderer: Inter in all caps, a brand font in the name's own capitalization.
+  const brand = font && font !== DEFAULT_FONT ? font : null;
+  const nameClass = cx("block leading-[1.02] font-black text-white", brand ? "[font-synthesis:none]" : "tracking-tight uppercase");
+  const nameFont = brand ? { fontFamily: fontStack(brand), lineHeight: 1.15 } : undefined;
 
   return (
     <div className="absolute inset-0">
+      {brand && <link rel="stylesheet" href={googleFontsCss([brand])} precedence="default" />}
       {img && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -155,7 +164,7 @@ function SceneFrame({ scene }: { scene: ResolvedScene }) {
             </div>
           )}
           <div className="mt-[1cqw] max-w-[80%] px-2 text-center">
-            <span className="block leading-[1.02] font-black tracking-tight text-white uppercase" style={{ fontSize: scene.headline.length > 22 ? "5.7cqw" : scene.headline.length > 14 ? "7.1cqw" : "8.3cqw" }}>
+            <span className={nameClass} style={{ ...nameFont, fontSize: scene.headline.length > 22 ? "5.7cqw" : scene.headline.length > 14 ? "7.1cqw" : "8.3cqw" }}>
               {scene.headline}
             </span>
           </div>
@@ -166,7 +175,7 @@ function SceneFrame({ scene }: { scene: ResolvedScene }) {
       {scene.kind === "outro" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-[3cqw] bg-black/50 text-center">
           <div className="max-w-[80%] px-2 text-center">
-            <span className="block leading-[1.02] font-black tracking-tight text-white uppercase" style={{ fontSize: scene.headline.length > 22 ? "4.4cqw" : "5.7cqw" }}>
+            <span className={nameClass} style={{ ...nameFont, fontSize: scene.headline.length > 22 ? "4.4cqw" : "5.7cqw" }}>
               {scene.headline || <span className="text-white/40">+ restaurant name</span>}
             </span>
           </div>
