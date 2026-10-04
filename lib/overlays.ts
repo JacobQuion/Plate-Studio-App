@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import type { FrameField } from "@/lib/ad-plan";
+import type { BrandFont } from "@/lib/brand-font";
 
 /**
  * sharp draws SVG text with whatever fonts fontconfig can find. Vercel's functions ship
@@ -31,6 +32,9 @@ useBundledFonts();
  * Rendering text through SVG + sharp instead of FFmpeg's drawtext means we don't
  * depend on the FFmpeg build having freetype/fontconfig, and we get gradients,
  * shadows and rounded pills for free.
+ *
+ * The restaurant name is set in the brand font (lib/brand-font.ts): Google fonts are drawn
+ * as outlines with real glyph widths; the bundled Inter stays SVG text in all caps.
  *
  *   intro  : eyebrow + restaurant name, centered
  *   dish   : lower third (name) + tagline line
@@ -129,18 +133,87 @@ function pill(x: number, y: number, label: string, fontSize: number, height: num
 }
 
 // ---------------------------------------------------------------------------
+// Headline (the restaurant name)
+// ---------------------------------------------------------------------------
+
+interface Headline {
+  lines: string[];
+  lineHeight: number;
+  width: number;
+  /** SVG for the block centered on `x`, its top at `top`. */
+  svg: (x: number, top: number) => string;
+}
+
+/** Wrap by measured width; the last kept line gets an ellipsis when text is left over. */
+function wrapMeasured(text: string, measure: (s: string) => number, maxWidth: number, maxLines: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.trim().split(/\s+/)) {
+    const next = line ? `${line} ${word}` : word;
+    if (measure(next) > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else line = next;
+  }
+  if (line) lines.push(line);
+  if (lines.length <= maxLines) return lines;
+  const kept = lines.slice(0, maxLines);
+  kept[maxLines - 1] = kept[maxLines - 1].replace(/\s*\S*$/, "") + "…";
+  return kept;
+}
+
+function headline(text: string, brand: BrandFont | undefined, fontSize: number, maxWidth: number, maxLines: number, tracking: number): Headline {
+  const font = brand?.font;
+  if (!font) {
+    const lines = wrap(text.toUpperCase(), fontSize, maxWidth, maxLines, 0.68);
+    const lineHeight = Math.round(fontSize * 1.02);
+    return {
+      lines,
+      lineHeight,
+      width: textWidth(lines, fontSize, 0.68),
+      svg: (x, top) => {
+        const tspans = lines.map((l, i) => `<tspan x="${x}" y="${top + (i + 1) * lineHeight - fontSize * 0.2}">${escapeXml(l)}</tspan>`).join("");
+        return `<text text-anchor="middle" font-family="${FONT}" font-size="${fontSize}" font-weight="900" letter-spacing="${tracking}" fill="#FFFFFF" filter="url(#shadow)">${tspans}</text>`;
+      },
+    };
+  }
+  // Brand fonts keep the name's own capitalization, like a logo, and shrink until it fits.
+  let size = fontSize;
+  let lines: string[];
+  let measure: (s: string) => number;
+  for (;;) {
+    const sz = size;
+    measure = (s) => font.getAdvanceWidth(s, sz, { kerning: true });
+    lines = wrapMeasured(text, measure, maxWidth, maxLines);
+    if (lines.every((l) => measure(l) <= maxWidth) || size <= fontSize * 0.5) break;
+    size = Math.round(size * 0.92);
+  }
+  // Tall script and display fonts need more room between lines than Inter.
+  const lineHeight = Math.round(size * Math.min(1.35, Math.max(1.02, ((font.ascender - font.descender) / font.unitsPerEm) * 0.85)));
+  const widths = lines.map(measure);
+  return {
+    lines,
+    lineHeight,
+    width: Math.max(...widths),
+    svg: (x, top) =>
+      `<g filter="url(#shadow)" fill="#FFFFFF">${lines
+        .map((l, i) => `<path d="${font.getPath(l, x - widths[i] / 2, top + (i + 1) * lineHeight - size * 0.2, size, { kerning: true }).toPathData(1)}"/>`)
+        .join("")}</g>`,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Intro
 // ---------------------------------------------------------------------------
 
-function introSvg(restaurant: string, eyebrow: string): { svg: Buffer; boxes: FrameBoxes } {
-  const name = restaurant.toUpperCase() || "NOW SERVING";
+function introSvg(restaurant: string, eyebrow: string, brand?: BrandFont): { svg: Buffer; boxes: FrameBoxes } {
+  const name = restaurant.trim() || "Now serving";
   const fontSize = name.length > 22 ? 110 : name.length > 14 ? 136 : 160;
-  const lines = wrap(name, fontSize, 1500, 2, 0.68);
-  const lineHeight = Math.round(fontSize * 1.02);
+  const head = headline(name, brand, fontSize, 1500, 2, -2);
+  const { lines, lineHeight } = head;
   const blockTop = VIDEO_HEIGHT / 2 - (lines.length * lineHeight) / 2 + 30;
-  const tspans = lines.map((l, i) => `<tspan x="${VIDEO_WIDTH / 2}" y="${blockTop + (i + 1) * lineHeight - fontSize * 0.2}">${escapeXml(l)}</tspan>`).join("");
   const ruleY = blockTop + lines.length * lineHeight + 40;
-  const headW = textWidth(lines, fontSize, 0.68);
+  const headW = head.width;
   const eyeW = eyebrow.length * 36 * 0.95;
   const boxes: FrameBoxes = {
     headline: box((VIDEO_WIDTH - headW) / 2, blockTop, headW, lines.length * lineHeight),
@@ -148,7 +221,7 @@ function introSvg(restaurant: string, eyebrow: string): { svg: Buffer; boxes: Fr
   };
   const svg = svgDoc(
     `<text x="${VIDEO_WIDTH / 2}" y="${blockTop - 40}" text-anchor="middle" font-family="${FONT}" font-size="36" font-weight="700" letter-spacing="10" fill="${ACCENT}" filter="url(#shadow)">${escapeXml(eyebrow.toUpperCase())}</text>
-     <text text-anchor="middle" font-family="${FONT}" font-size="${fontSize}" font-weight="900" letter-spacing="-2" fill="#FFFFFF" filter="url(#shadow)">${tspans}</text>
+     ${head.svg(VIDEO_WIDTH / 2, blockTop)}
      <rect x="${VIDEO_WIDTH / 2 - 60}" y="${ruleY}" width="120" height="8" rx="4" fill="url(#pricefill)"/>`,
   );
   return { svg, boxes };
@@ -205,19 +278,19 @@ function dishTaglineSvg({ tagline }: DishOverlayText): { svg: Buffer; boxes: Fra
 // Outro / end card
 // ---------------------------------------------------------------------------
 
-function outroSvg(restaurant: string, cta: string, website: string): { svg: Buffer; boxes: FrameBoxes } {
-  const name = restaurant.toUpperCase();
+function outroSvg(restaurant: string, cta: string, website: string, brand?: BrandFont): { svg: Buffer; boxes: FrameBoxes } {
+  const name = restaurant.trim();
   const fontSize = name.length > 22 ? 84 : 110;
-  const lines = name ? wrap(name, fontSize, 1500, 2, 0.68) : [];
-  const lineHeight = Math.round(fontSize * 1.02);
+  const head = name ? headline(name, brand, fontSize, 1500, 2, -1) : null;
+  const lines = head?.lines ?? [];
+  const lineHeight = head?.lineHeight ?? 0;
   const blockHeight = lines.length * lineHeight + 60 + 110 + (website ? 90 : 0);
   let y = VIDEO_HEIGHT / 2 - blockHeight / 2;
   const headTop = y;
-  const tspans = lines.map((l, i) => `<tspan x="${VIDEO_WIDTH / 2}" y="${y + (i + 1) * lineHeight - fontSize * 0.2}">${escapeXml(l)}</tspan>`).join("");
   y += lines.length * lineHeight + 60;
   const button = pill(VIDEO_WIDTH / 2, y, `${(cta || "Order now").toUpperCase().slice(0, 24)}  →`, 48, 110, "#FFFFFF", "#111111", "middle");
   y += 110 + 80;
-  const headW = lines.length ? textWidth(lines, fontSize, 0.68) : 0;
+  const headW = head?.width ?? 0;
   const webW = website.slice(0, 48).length * 40 * 0.58;
   const boxes: FrameBoxes = {
     ...(lines.length ? { headline: box((VIDEO_WIDTH - headW) / 2, headTop, headW, lines.length * lineHeight) } : {}),
@@ -225,7 +298,7 @@ function outroSvg(restaurant: string, cta: string, website: string): { svg: Buff
     ...(website ? { subline: box((VIDEO_WIDTH - webW) / 2, y - 42, webW, 56) } : {}),
   };
   const svg = svgDoc(
-    `<text text-anchor="middle" font-family="${FONT}" font-size="${fontSize}" font-weight="900" letter-spacing="-1" fill="#FFFFFF" filter="url(#shadow)">${tspans}</text>
+    `${head?.svg(VIDEO_WIDTH / 2, headTop) ?? ""}
      ${button.svg}
      ${website ? `<text x="${VIDEO_WIDTH / 2}" y="${y}" text-anchor="middle" font-family="${FONT}" font-size="40" font-weight="600" letter-spacing="2" fill="${ACCENT}" filter="url(#shadow)">${escapeXml(website.slice(0, 48))}</text>` : ""}`,
   );
@@ -236,9 +309,9 @@ function outroSvg(restaurant: string, cta: string, website: string): { svg: Buff
 // Writers (file names are keyed by scene id)
 // ---------------------------------------------------------------------------
 
-export async function renderIntroOverlay(dir: string, sceneId: string, headline: string, eyebrow: string): Promise<{ file: string; boxes: FrameBoxes }> {
+export async function renderIntroOverlay(dir: string, sceneId: string, headline: string, eyebrow: string, brand?: BrandFont): Promise<{ file: string; boxes: FrameBoxes }> {
   const file = `${dir}/overlay_${sceneId}.png`;
-  const { svg, boxes } = introSvg(headline, eyebrow);
+  const { svg, boxes } = introSvg(headline, eyebrow, brand);
   await sharp(svg).png().toFile(file);
   return { file, boxes };
 }
@@ -251,9 +324,9 @@ export async function renderDishOverlays(dir: string, sceneId: string, text: Dis
   return { ...files, boxes: { ...title.boxes, ...tagline.boxes } };
 }
 
-export async function renderOutroOverlay(dir: string, sceneId: string, headline: string, cta: string, website: string): Promise<{ file: string; boxes: FrameBoxes }> {
+export async function renderOutroOverlay(dir: string, sceneId: string, headline: string, cta: string, website: string, brand?: BrandFont): Promise<{ file: string; boxes: FrameBoxes }> {
   const file = `${dir}/overlay_${sceneId}.png`;
-  const { svg, boxes } = outroSvg(headline, cta, website);
+  const { svg, boxes } = outroSvg(headline, cta, website, brand);
   await sharp(svg).png().toFile(file);
   return { file, boxes };
 }
