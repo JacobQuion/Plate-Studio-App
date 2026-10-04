@@ -18,6 +18,7 @@ import {
   type Timeline as TimelineData,
 } from "@/lib/ad-plan";
 import { DEMOS, DEMO_RESTAURANTS, demoForProject, type DemoRestaurant } from "@/lib/demo-menus";
+import { DEFAULT_FONT, type BrandFontInfo } from "@/lib/fonts";
 import type { ProjectRecord } from "@/lib/projects";
 import type { GenerateDoneEvent, GenerateStreamEvent, StageId } from "@/lib/types";
 import { ChatPane, type PendingPhoto } from "@/app/_components/ChatPane";
@@ -55,6 +56,9 @@ function restoredGen(initial: ProjectRecord | null): GenState {
   return { phase: "done", stages, result, elapsed };
 }
 
+const TITLE_CLASS =
+  "field-sizing-content max-w-[40vw] min-w-24 truncate rounded-md bg-transparent px-1.5 py-1 text-[17px] leading-7 font-medium text-zinc-100 outline-none placeholder:text-zinc-500 hover:bg-white/[0.04] focus:bg-white/[0.06]";
+
 /** How long a demo's saved render takes to "render" again on each visit. */
 const REPLAY_MS = 6500;
 /** Roughly how long an example takes to render on the server, for its progress bar. */
@@ -82,7 +86,23 @@ function replayStages(f: number, scenes: number): Record<StageId, StageState> {
  * `demo`: a dashboard example (a shared project). It renders once, then each visit replays that render;
  * editing it saves the edits as a new project of the user's own instead.
  */
-export function Studio({ id: routeId, initial, template, demo = false }: { id: string; initial: ProjectRecord | null; template?: string; demo?: boolean }) {
+export function Studio({
+  id: routeId,
+  initial,
+  template,
+  demo = false,
+  exampleTitle: initialTitle,
+  starter,
+}: {
+  id: string;
+  initial: ProjectRecord | null;
+  template?: string;
+  demo?: boolean;
+  /** A dashboard example's card title ("Example 1: …"); the top bar edits it while the example is open. */
+  exampleTitle?: string;
+  /** A new project: the owner's Yelp or Google Maps link to import the menu from. */
+  starter?: { link: string };
+}) {
   const router = useRouter();
   const [project, setProject] = useState<AdProject>(() => initial?.project ?? newProject());
   const [library, setLibrary] = useState<LibraryDish[]>(() => initial?.library ?? []);
@@ -95,6 +115,21 @@ export function Studio({ id: routeId, initial, template, demo = false }: { id: s
   const [id, setId] = useState(routeId);
   const idRef = useRef(routeId);
   const replay = demo && !!initial?.render;
+  // An example's title is the dashboard card's, saved for this owner; editing it doesn't copy the example.
+  const [exampleTitle, setExampleTitle] = useState(initialTitle ?? "");
+  const savedTitle = useRef(initialTitle ?? "");
+  const editingTitle = initialTitle !== undefined && id === routeId;
+  const saveTitle = useCallback(async () => {
+    const demoId = demoForProject(routeId)?.id;
+    const title = exampleTitle.trim();
+    if (!demoId || !title || title === savedTitle.current) return;
+    savedTitle.current = title;
+    await fetch("/api/example-title", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ demoId, title }) }).catch(() => {});
+  }, [exampleTitle, routeId]);
+  useEffect(() => {
+    const t = setTimeout(saveTitle, SAVE_DELAY);
+    return () => clearTimeout(t);
+  }, [saveTitle]);
   const [gen, setGen] = useState<GenState>(() => (replay ? { phase: "running", stages: freshStages(), startedAt: Date.now(), replayUntil: Date.now() + REPLAY_MS } : restoredGen(initial)));
   const [renderedKey, setRenderedKey] = useState<string | null>(initial?.render?.editKey ?? null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -104,6 +139,23 @@ export function Studio({ id: routeId, initial, template, demo = false }: { id: s
   const [range, setRange] = useState<[number, number] | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [panelWidth, setPanelWidth] = useState(400);
+  const [brandFont, setBrandFont] = useState<BrandFontInfo | null>(null);
+
+  // Which font the restaurant name will be set in (detected from the website unless one was picked).
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      const q = new URLSearchParams({ website: project.website, ...(project.font ? { font: project.font } : {}) });
+      fetch(`/api/brand-font?${q}`, { signal: ctrl.signal })
+        .then((r) => r.json())
+        .then(setBrandFont)
+        .catch(() => {});
+    }, 500);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [project.website, project.font]);
   const videoRef = useRef<HTMLVideoElement>(null);
   /** Project state before each assistant turn, so the turn can be reverted. */
   const snapshots = useRef(new Map<string, Snapshot>());
@@ -112,7 +164,9 @@ export function Studio({ id: routeId, initial, template, demo = false }: { id: s
   const result = gen.phase === "done" ? gen.result : null;
   const scenes = useMemo(() => resolveScenes(project, library), [project, library]);
   const hasDishes = scenes.some((s) => s.kind === "dish");
-  const stale = !!result && renderedKey !== editKey(project, library);
+  // Also out of date when the brand font changed since (e.g. a video from before brand fonts, in Inter).
+  const fontChanged = !!result && !!brandFont && (result.font ?? DEFAULT_FONT) !== brandFont.family;
+  const stale = !!result && (renderedKey !== editKey(project, library) || fontChanged);
   const videoMode = !!result && showVideo && !running;
 
   // Real scene timings when the video matches the edits; estimates otherwise.
@@ -222,7 +276,7 @@ export function Studio({ id: routeId, initial, template, demo = false }: { id: s
 
   const goBack = async (e: React.MouseEvent) => {
     e.preventDefault();
-    await save();
+    await Promise.all([save(), saveTitle()]);
     router.push("/");
   };
 
@@ -515,6 +569,15 @@ export function Studio({ id: routeId, initial, template, demo = false }: { id: s
     }
   };
 
+  // A new project imports the owner's menu from the listing they gave when signing up.
+  const imported = useRef(false);
+  useEffect(() => {
+    if (imported.current || !starter?.link) return;
+    imported.current = true;
+    void send(starter.link);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ---- Editor ------------------------------------------------------------------
   const editing = busy || running;
 
@@ -591,19 +654,39 @@ export function Studio({ id: routeId, initial, template, demo = false }: { id: s
           >
             <ChevronLeft className="size-[18px]" /> Back
           </Link>
-          <input
-            value={project.restaurant}
-            onChange={(e) => setProject((p) => ({ ...p, restaurant: e.target.value }))}
-            disabled={editing}
-            placeholder="New Project"
-            aria-label="Restaurant name"
-            className="field-sizing-content max-w-[40vw] min-w-24 truncate rounded-md bg-transparent px-1.5 py-1 text-[17px] leading-7 font-medium text-zinc-100 outline-none placeholder:text-zinc-500 hover:bg-white/[0.04] focus:bg-white/[0.06]"
-          />
-          {result && !stale && (
-            <span title="The video is up to date" className="hidden md:block">
-              <Check className="size-4 text-emerald-400" strokeWidth={2.5} />
-            </span>
-          )}
+          <div className="flex min-w-0 items-center">
+            {editingTitle ? (
+              <input
+                value={exampleTitle}
+                onChange={(e) => setExampleTitle(e.target.value)}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === "Escape") && e.currentTarget.blur()}
+                // A blank title goes back to the one it had.
+                onBlur={() => !exampleTitle.trim() && setExampleTitle(savedTitle.current)}
+                maxLength={80}
+                title="Rename"
+                aria-label="Example name"
+                className={TITLE_CLASS}
+              />
+            ) : (
+              <input
+                value={project.restaurant}
+                onChange={(e) => {
+                  setProject((p) => ({ ...p, restaurant: e.target.value }));
+                  // Show the live title card instead of the old video, so the new name appears as it's typed.
+                  const intro = scenes.find((s) => s.kind === "intro");
+                  if (intro && selectedId !== intro.id) selectScene(intro.id);
+                  setShowVideo(false);
+                }}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === "Escape") && e.currentTarget.blur()}
+                // Renaming is fine while a render runs (it only marks the video out of date), not while the assistant is editing.
+                disabled={busy}
+                placeholder="New Project"
+                title="Rename"
+                aria-label="Restaurant name"
+                className={TITLE_CLASS}
+              />
+            )}
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           {/* Sit closer to Render than the buttons sit to each other. */}
@@ -694,6 +777,7 @@ export function Studio({ id: routeId, initial, template, demo = false }: { id: s
             <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 px-2 pt-2 pb-1 sm:px-3 sm:pt-3 lg:pb-7">
               <div className="h-[calc((100vw-1rem)*9/16)] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1">
                 <Preview
+                  font={brandFont?.family}
                   ref={videoRef}
                   scene={hasDishes ? selected : null}
                   rendering={running}
@@ -714,7 +798,15 @@ export function Studio({ id: routeId, initial, template, demo = false }: { id: s
                   onLink={openLink}
                 />
               </div>
-              <RenderStatus gen={gen} stale={stale} canRender={hasDishes && !busy} showVideo={showVideo} onRender={() => void render()} onShowVideo={setShowVideo} />
+              <RenderStatus
+                gen={gen}
+                stale={stale}
+                staleNote={fontChanged && renderedKey === editKey(project, library) ? `This video isn't in your ${brandFont?.family} font yet.` : undefined}
+                canRender={hasDishes && !busy}
+                showVideo={showVideo}
+                onRender={() => void render()}
+                onShowVideo={setShowVideo}
+              />
             </div>
 
           </main>
