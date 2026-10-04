@@ -4,9 +4,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Check, Download, ExternalLink, LoaderCircle, Send, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { youtubeDetails, type AdProject, type ResolvedScene } from "@/lib/ad-plan";
-import { PLATFORM_INFO, PLATFORMS, type ConnectionsResponse, type Platform, type Privacy } from "@/lib/platforms";
+import { PLATFORM_INFO, PLATFORMS, type ConnectionsResponse, type Platform, type Privacy, type SetupInfo } from "@/lib/platforms";
 import type { GenerateDoneEvent } from "@/lib/types";
 import { PlatformIcon } from "./PlatformIcon";
+import { PlatformSetup } from "./PlatformSetup";
 import { cx, formatTime } from "./shared";
 
 type PostState = { state: "working" } | { state: "done"; url: string | null; note?: string } | { state: "error"; message: string; reconnect?: boolean };
@@ -61,6 +62,8 @@ export function ExportDialog({
   const [phase, setPhase] = useState<"idle" | "rendering" | "publishing">("idle");
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [setupInfo, setSetupInfo] = useState<SetupInfo | null>(null);
+  const [settingUp, setSettingUp] = useState<Platform | null>(null);
 
   const details = youtubeDetails(project, scenes);
   const tags = details.tags.split(", ").filter(Boolean);
@@ -85,6 +88,10 @@ export function ExportDialog({
   useEffect(() => {
     if (!open) return;
     void loadConnections();
+    void fetch("/api/connect/setup")
+      .then((r) => r.json())
+      .then(setSetupInfo)
+      .catch(() => {});
     if (!edited) {
       setTitle(details.title);
       setCaption(details.description);
@@ -241,7 +248,7 @@ export function ExportDialog({
                   </span>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-medium text-zinc-100">{project.restaurant.trim() || "Untitled project"}</p>
+                  <p className="truncate text-[15px] font-medium text-zinc-100">{project.restaurant.trim() || "New Project"}</p>
                   <p className="mt-0.5 text-[13px] text-zinc-500">
                     {video ? "MP4 · up to date" : rendering ? "Rendering your latest edits…" : "Your latest edits will be rendered first"}
                   </p>
@@ -265,41 +272,60 @@ export function ExportDialog({
                     const post = posts[p];
                     const canSelect = !!c?.connected && post?.state !== "working";
                     return (
-                      <li key={p} className="flex min-h-16 items-center gap-3 px-3.5 py-2.5">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(p) && !!c?.connected}
-                          disabled={!canSelect || busy}
-                          onChange={() => toggle(p)}
-                          aria-label={`Publish to ${PLATFORM_INFO[p].label}`}
-                          className={cx("size-4 shrink-0 accent-brand-500", !c?.connected && "invisible", !anyConnected && "hidden")}
-                        />
-                        <PlatformIcon platform={p} className="size-7" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[15px] font-medium text-zinc-100">{PLATFORM_INFO[p].label}</p>
-                          <PlatformLine connected={!!c?.connected} configured={!!c?.configured} account={c?.account} post={post} loading={!connections} />
+                      <li key={p}>
+                        <div className="flex min-h-16 items-center gap-3 px-3.5 py-2.5">
+                          <input
+                            type="checkbox"
+                            checked={selected.has(p) && !!c?.connected}
+                            disabled={!canSelect || busy}
+                            onChange={() => toggle(p)}
+                            aria-label={`Publish to ${PLATFORM_INFO[p].label}`}
+                            className={cx("size-4 shrink-0 accent-brand-500", !c?.connected && "invisible", !anyConnected && "hidden")}
+                          />
+                          <PlatformIcon platform={p} className="size-7" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[15px] font-medium text-zinc-100">{PLATFORM_INFO[p].label}</p>
+                            <PlatformLine connected={!!c?.connected} configured={!!c?.configured} account={c?.account} post={post} loading={!connections} />
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            {post?.state === "working" ? (
+                              <LoaderCircle aria-label="Publishing" className="accent-text size-5 animate-spin text-brand-400" />
+                            ) : post?.state === "done" && post.url ? (
+                              <a href={post.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-400/10 px-3 text-[13px] font-medium text-emerald-300 transition hover:bg-emerald-400/20">
+                                View post <ExternalLink className="size-3.5" />
+                              </a>
+                            ) : !connections ? null : !c?.configured ? (
+                              <>
+                                <SmallButton onClick={() => uploadManually(p)} disabled={busy} title={`Downloads the MP4, copies the caption and opens ${PLATFORM_INFO[p].label}`}>
+                                  Upload manually
+                                </SmallButton>
+                                {setupInfo && (
+                                  <SmallButton onClick={() => setSettingUp((s) => (s === p ? null : p))} primary={settingUp !== p}>
+                                    {settingUp === p ? "Close" : "Set up"}
+                                  </SmallButton>
+                                )}
+                              </>
+                            ) : !c.connected || (post?.state === "error" && post.reconnect) ? (
+                              <SmallButton onClick={() => connect(p)} primary>
+                                {c.connected ? "Reconnect" : "Connect"}
+                              </SmallButton>
+                            ) : (
+                              <SmallButton onClick={() => disconnect(p)} disabled={busy}>
+                                Disconnect
+                              </SmallButton>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-1">
-                          {post?.state === "working" ? (
-                            <LoaderCircle aria-label="Publishing" className="accent-text size-5 animate-spin text-brand-400" />
-                          ) : post?.state === "done" && post.url ? (
-                            <a href={post.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-400/10 px-3 text-[13px] font-medium text-emerald-300 transition hover:bg-emerald-400/20">
-                              View post <ExternalLink className="size-3.5" />
-                            </a>
-                          ) : !connections ? null : !c?.configured ? (
-                            <SmallButton onClick={() => uploadManually(p)} disabled={busy} title={`Downloads the MP4, copies the caption and opens ${PLATFORM_INFO[p].label}`}>
-                              Upload manually
-                            </SmallButton>
-                          ) : !c.connected || (post?.state === "error" && post.reconnect) ? (
-                            <SmallButton onClick={() => connect(p)} primary>
-                              {c.connected ? "Reconnect" : "Connect"}
-                            </SmallButton>
-                          ) : (
-                            <SmallButton onClick={() => disconnect(p)} disabled={busy}>
-                              Disconnect
-                            </SmallButton>
-                          )}
-                        </div>
+                        {settingUp === p && !c?.configured && setupInfo && (
+                          <PlatformSetup
+                            platform={p}
+                            info={setupInfo}
+                            onSaved={() => {
+                              setSettingUp(null);
+                              void loadConnections();
+                            }}
+                          />
+                        )}
                       </li>
                     );
                   })}
@@ -307,7 +333,7 @@ export function ExportDialog({
                 {copied && <p className="mt-2 text-[13px] text-emerald-300">Caption copied. Paste it in when you upload the video.</p>}
                 {connections && PLATFORMS.some((p) => !connections[p].configured) && (
                   <p className="mt-2 text-[12px] leading-relaxed text-zinc-500">
-                    One-click publishing for a platform turns on once its app keys are added to <code className="text-zinc-400">.env.local</code> (see <code className="text-zinc-400">.env.example</code>).
+                    Use <span className="text-zinc-400">Set up</span> to turn on one-click publishing for a platform. It takes a few minutes per platform to create the developer app.
                   </p>
                 )}
               </section>
