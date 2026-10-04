@@ -59,6 +59,8 @@ export interface GenerateDoneEvent {
   /** Clickable text regions per scene id: field -> normalized [x, y, w, h]. */
   layout: Record<string, Partial<Record<"headline" | "price" | "subline" | "cta", [number, number, number, number]>>>;
   providers: { video: VideoProvider; voice: VoiceProvider };
+  /** Font the restaurant name was set in (renders from before brand fonts: Inter). */
+  font?: string;
 }
 
 export interface GenerateErrorEvent {
