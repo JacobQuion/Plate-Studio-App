@@ -7,6 +7,7 @@ import type { GenState } from "./shared";
 export function RenderStatus({
   gen,
   stale,
+  staleNote,
   canRender,
   showVideo,
   onRender,
@@ -15,6 +16,8 @@ export function RenderStatus({
   gen: GenState;
   /** There are edits the current video doesn't include. */
   stale: boolean;
+  /** Why the video is out of date, when it isn't the user's edits. */
+  staleNote?: string;
   canRender: boolean;
   showVideo: boolean;
   onRender: () => void;
@@ -40,7 +43,7 @@ export function RenderStatus({
     return (
       <Row>
         <span className="flex items-center gap-2 text-zinc-300">
-          <span className="size-2 rounded-full bg-amber-400" /> You have changes that aren&apos;t in the video yet.
+          <span className="size-2 rounded-full bg-amber-400" /> {staleNote ?? "You have changes that aren't in the video yet."}
           <button onClick={() => onShowVideo(!showVideo)} className="text-zinc-500 underline-offset-2 hover:text-white hover:underline">
             {showVideo ? "Show my edits" : "Play last version"}
           </button>
