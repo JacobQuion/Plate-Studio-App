@@ -91,23 +91,29 @@ const SUGGESTIONS = ["Paste a Yelp or Google Maps link", "Upload photos of your 
 function useTypewriter(phrases: string[], active: boolean) {
   const [index, setIndex] = useState(0);
   const [length, setLength] = useState(0);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!active) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return setLength(phrases[index].length);
-    const done = length >= phrases[index].length;
+    const full = length >= phrases[index].length;
+    // Type the phrase, hold it, backspace it out, then type the next one.
     const id = setTimeout(
       () => {
-        if (!done) return setLength((l) => l + 1);
-        setLength(0);
-        setIndex((i) => (i + 1) % phrases.length);
+        if (deleting) {
+          if (length > 0) return setLength((l) => l - 1);
+          setDeleting(false);
+          return setIndex((i) => (i + 1) % phrases.length);
+        }
+        if (!full) return setLength((l) => l + 1);
+        setDeleting(true);
       },
-      done ? 2600 : 45,
+      deleting ? (length > 0 ? 22 : 350) : full ? 2600 : 45,
     );
     return () => clearTimeout(id);
-  }, [active, phrases, index, length]);
+  }, [active, phrases, index, length, deleting]);
 
-  return { key: index, text: phrases[index].slice(0, length), typing: length < phrases[index].length };
+  return { text: phrases[index].slice(0, length), typing: deleting || length < phrases[index].length };
 }
 
 export function ChatPane({
@@ -321,45 +327,9 @@ export function ChatPane({
             </div>
           )}
 
-          <div className="flex items-end gap-1 p-2">
-            <div ref={menu} className="relative">
-              <button
-                onClick={() => setMenuOpen((o) => !o)}
-                aria-label="Add photos, a link or details"
-                title="Add photos, a link or details"
-                className={cx("flex size-10 items-center justify-center rounded-xl transition", menuOpen ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/[0.06] hover:text-white")}
-              >
-                <Plus className={cx("size-5 transition", menuOpen && "rotate-45")} />
-              </button>
-              <AnimatePresence>
-                {menuOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 6, scale: 0.98 }}
-                    transition={{ duration: 0.12 }}
-                    className="absolute bottom-full left-0 z-30 mb-2 w-72 origin-bottom-left rounded-xl border border-white/10 bg-[#161619] p-1.5 shadow-2xl"
-                  >
-                    <MenuSection title="Add to your ad" items={ADD_ITEMS} onPick={pick} />
-                    <div className="my-1.5 h-px bg-white/[0.06]" />
-                    <MenuSection title="Tell us about your business" items={DETAIL_ITEMS} onPick={pick} />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/*"
-              multiple
-              hidden
-              onChange={(e) => {
-                onAddFiles(Array.from(e.target.files ?? []));
-                e.target.value = "";
-              }}
-            />
-            {/* Textarea and suggestion share one grid cell; the composer keeps a fixed height (its top lines up with the timeline's) and long drafts scroll. */}
-            <div className="grid min-w-0 flex-1" onClick={() => textarea.current?.focus()}>
+          <div className="px-2 pt-2 pb-0.5">
+            {/* Textarea and suggestion share one grid cell, full width above the toolbar; the composer keeps a fixed height (its top lines up with the timeline's) and long drafts scroll. */}
+            <div className="grid min-w-0" onClick={() => textarea.current?.focus()}>
               <textarea
                 ref={textarea}
                 value={draft}
@@ -373,16 +343,16 @@ export function ChatPane({
                   }
                 }}
                 placeholder={pending.length ? "Add a note about these photos (optional)" : ""}
-                className="col-start-1 row-start-1 block h-[67px] w-full resize-none bg-transparent py-2 text-[15px] text-white outline-none placeholder:text-zinc-500"
+                className="col-start-1 row-start-1 block h-[33px] w-full resize-none bg-transparent px-1 py-1 text-[15px] text-white outline-none placeholder:text-zinc-500"
               />
               <AnimatePresence initial={false}>
                 {showSuggestion && (
                   <motion.span
-                    key={suggestion.key}
+                    key="suggestion"
                     aria-hidden
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
-                    className="pointer-events-none col-start-1 row-start-1 py-2 text-[15px] leading-normal text-zinc-500"
+                    className="pointer-events-none col-start-1 row-start-1 px-1 py-1 text-[15px] leading-normal text-zinc-500"
                   >
                     {suggestion.text}
                     <span className={cx("ml-px inline-block h-[1.1em] w-px translate-y-[3px] bg-zinc-500", !suggestion.typing && "animate-pulse")} />
@@ -390,14 +360,52 @@ export function ChatPane({
                 )}
               </AnimatePresence>
             </div>
-            <button
-              onClick={() => send()}
-              disabled={busy || (!draft.trim() && !pending.length)}
-              aria-label="Send"
-              className="mb-1 flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-zinc-950 transition hover:bg-zinc-200 disabled:opacity-30"
-            >
-              <ArrowUp className="size-4" strokeWidth={2.5} />
-            </button>
+            <div className="flex h-10 items-center justify-between">
+              <div ref={menu} className="relative">
+                <button
+                  onClick={() => setMenuOpen((o) => !o)}
+                  aria-label="Add photos, a link or details"
+                  title="Add photos, a link or details"
+                  className={cx("flex size-10 items-center justify-center rounded-xl transition", menuOpen ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/[0.06] hover:text-white")}
+                >
+                  <Plus className={cx("size-5 transition", menuOpen && "rotate-45")} />
+                </button>
+                <AnimatePresence>
+                  {menuOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                      transition={{ duration: 0.12 }}
+                      className="absolute bottom-full left-0 z-30 mb-2 w-72 origin-bottom-left rounded-xl border border-white/10 bg-[#161619] p-1.5 shadow-2xl"
+                    >
+                      <MenuSection title="Add to your ad" items={ADD_ITEMS} onPick={pick} />
+                      <div className="my-1.5 h-px bg-white/[0.06]" />
+                      <MenuSection title="Tell us about your business" items={DETAIL_ITEMS} onPick={pick} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                onChange={(e) => {
+                  onAddFiles(Array.from(e.target.files ?? []));
+                  e.target.value = "";
+                }}
+              />
+              <button
+                onClick={() => send()}
+                disabled={busy || (!draft.trim() && !pending.length)}
+                aria-label="Send"
+                className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-zinc-950 transition hover:bg-zinc-200 disabled:opacity-30"
+              >
+                <ArrowUp className="size-4" strokeWidth={2.5} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
