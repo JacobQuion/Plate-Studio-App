@@ -86,13 +86,13 @@ export const claimDemo = (demo: DemoRestaurant, startedAt: number) => writeMark(
 /** Render the example and save it to its project. Call after claimDemo(). */
 export async function renderDemo(demo: DemoRestaurant, startedAt: number) {
   try {
-    const record = await saveProject(demoProjectId(demo.id), demoContent(demo));
+    const record = await saveProject(demoProjectId(demo.id), demoContent(demo), null);
     const result = await generateAd(record.project, record.library);
     await saveVideo(result.jobId);
-    const { jobId, durationSeconds, timeline, layout, script, providers } = result;
+    const { jobId, durationSeconds, timeline, layout, script, providers, font } = result;
     await attachRender(
       record.id,
-      { jobId, durationSeconds, timeline, layout, script, providers, editKey: editKey(record.project, record.library), elapsed: (Date.now() - startedAt) / 1000 },
+      { jobId, durationSeconds, timeline, layout, script, providers, font, editKey: editKey(record.project, record.library), elapsed: (Date.now() - startedAt) / 1000 },
       { project: record.project, library: record.library },
     );
     await deleteObject(markKey(demo.id));
