@@ -1,5 +1,6 @@
 import { sanitizeLibrary, sanitizeProject, type AdProject, type LibraryDish } from "@/lib/ad-plan";
-import { attachRender, isProjectId, saveVideo } from "@/lib/projects";
+import { currentUserId } from "@/lib/auth";
+import { attachRender, canAccess, getProject, isProjectId, saveVideo } from "@/lib/projects";
 import { generateAd } from "@/lib/video-pipeline";
 import type { GenerateStreamEvent } from "@/lib/types";
 
@@ -30,6 +31,10 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Expected a JSON body with { project, library }" }, { status: 400 });
   }
+  const userId = await currentUserId();
+  if (!userId) return Response.json({ error: "Sign in to continue." }, { status: 401 });
+  // Only record the render on a project this owner can edit.
+  if (projectId && !canAccess(await getProject(projectId), userId)) projectId = null;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -46,8 +51,8 @@ export async function POST(req: Request) {
         const result = await generateAd(project, library, send);
         await saveVideo(result.jobId);
         if (projectId) {
-          const { jobId, durationSeconds, timeline, layout, script, providers } = result;
-          await attachRender(projectId, { jobId, durationSeconds, timeline, layout, script, providers, editKey, elapsed: (Date.now() - startedAt) / 1000 }, { project, library }).catch((err) =>
+          const { jobId, durationSeconds, timeline, layout, script, providers, font } = result;
+          await attachRender(projectId, { jobId, durationSeconds, timeline, layout, script, providers, font, editKey, elapsed: (Date.now() - startedAt) / 1000 }, { project, library }).catch((err) =>
             console.warn("[generate] couldn't save the render to the project:", err),
           );
         }
@@ -61,6 +66,7 @@ export async function POST(req: Request) {
           layout: result.layout,
           script: result.script,
           providers: result.providers,
+          font: result.font,
         });
       } catch (err) {
         console.error("[generate] pipeline failed:", err);
