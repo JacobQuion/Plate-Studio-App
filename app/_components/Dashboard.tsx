@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Clapperboard, Download, EllipsisVertical, Play, Plus, Search, Trash2, UtensilsCrossed } from "lucide-react";
+import { Clapperboard, Download, EllipsisVertical, LogOut, Play, Plus, Search, Trash2, UserRound, UtensilsCrossed } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -33,8 +33,16 @@ const fullDate = (ms: number) => new Date(ms).toLocaleString("en", { dateStyle: 
 /** Saved projects are hidden for now: the home page shows only "New project" and the examples. */
 const SHOW_PROJECTS = false;
 
+export interface Owner {
+  firstName: string;
+  lastName: string;
+  email: string;
+  restaurant: string;
+}
+
 /** Every saved project, newest edit first. */
-export function Dashboard({ projects: initial }: { projects: ProjectSummary[] }) {
+/** `exampleTitles`: each example card's title, which the owner can change from the example's studio. */
+export function Dashboard({ projects: initial, exampleTitles, owner }: { projects: ProjectSummary[]; exampleTitles: Record<string, string>; owner: Owner }) {
   const router = useRouter();
   const [projects, setProjects] = useState(initial);
   const [query, setQuery] = useState("");
@@ -48,7 +56,7 @@ export function Dashboard({ projects: initial }: { projects: ProjectSummary[] })
   const newProject = (template?: string) => router.push(`/studio/${template ? demoProjectId(template) : crypto.randomUUID()}`);
 
   const remove = async (p: ProjectSummary) => {
-    if (!confirm(`Delete "${p.name || "Untitled project"}"? Its video and chat will be deleted too. Posts you've published stay up.`)) return;
+    if (!confirm(`Delete "${p.name || "New Project"}"? Its video and chat will be deleted too. Posts you've published stay up.`)) return;
     setProjects((list) => list.filter((x) => x.id !== p.id));
     await fetch(`/api/projects/${p.id}`, { method: "DELETE" }).catch(() => {});
     router.refresh();
@@ -66,11 +74,12 @@ export function Dashboard({ projects: initial }: { projects: ProjectSummary[] })
             <img src="/icon.svg" alt="" className="size-7" />
             <span className="font-display text-[17px] font-bold tracking-tight text-white">Plate Studio</span>
           </Link>
+          <AccountMenu owner={owner} />
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-4 pt-8 pb-16 sm:px-6">
-        <NewAd onPick={newProject} />
+        <NewAd titles={exampleTitles} onPick={newProject} />
 
         {SHOW_PROJECTS && projects.length > 0 && (
           <section className="mt-14">
@@ -107,7 +116,7 @@ export function Dashboard({ projects: initial }: { projects: ProjectSummary[] })
 }
 
 /** "New project" plus the sample restaurants, as one 3×2 grid. Templates open their shared demo project. */
-function NewAd({ onPick }: { onPick: (template?: string) => void }) {
+function NewAd({ titles, onPick }: { titles: Record<string, string>; onPick: (template?: string) => void }) {
   const demos = useDemoStatuses();
   return (
     <section>
@@ -120,13 +129,13 @@ function NewAd({ onPick }: { onPick: (template?: string) => void }) {
                 <Plus className="size-5" />
               </span>
             </div>
-            <p className="mt-3 truncate text-[15px] font-semibold text-zinc-100">New Video</p>
+            <p className="mt-3 truncate text-[15px] font-semibold text-zinc-100">New Project</p>
             <p className="mt-0.5 text-[13px] text-zinc-500">Start from scratch</p>
           </button>
         </li>
         {TEMPLATES.map((t, i) => (
           <li key={t.id}>
-            <TemplateCard template={t} n={i + 1} demo={demos?.[t.id]} onPick={() => onPick(t.id)} />
+            <TemplateCard template={t} title={titles[t.id] || `Example ${i + 1}: ${t.name}`} demo={demos?.[t.id]} onPick={() => onPick(t.id)} />
           </li>
         ))}
       </ul>
@@ -135,7 +144,7 @@ function NewAd({ onPick }: { onPick: (template?: string) => void }) {
 }
 
 /** One example, with its server-side render's status. */
-function TemplateCard({ template: t, n, demo, onPick }: { template: (typeof TEMPLATES)[number]; n: number; demo?: DemoStatus; onPick: () => void }) {
+function TemplateCard({ template: t, title, demo, onPick }: { template: (typeof TEMPLATES)[number]; title: string; demo?: DemoStatus; onPick: () => void }) {
   const badge: { dot: string; label: string; title?: string } =
     demo?.status === "ready"
       ? { dot: "bg-emerald-400", label: "Ready" }
@@ -157,9 +166,7 @@ function TemplateCard({ template: t, n, demo, onPick }: { template: (typeof TEMP
           <Play className="size-3 fill-current" strokeWidth={3} /> Watch demo
         </span>
       </div>
-      <p className="mt-3 truncate text-[15px] font-semibold text-zinc-100">
-        Example {n}: {t.name}
-      </p>
+      <p className="mt-3 truncate text-[15px] font-semibold text-zinc-100">{title}</p>
       <p className="mt-0.5 text-[13px] text-zinc-500">{t.cuisine}</p>
     </button>
   );
@@ -238,7 +245,7 @@ function ProjectCard({ project: p, now, onDelete }: { project: ProjectSummary; n
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[15px] font-semibold text-zinc-100">
             <Link href={href} className="hover:underline">
-              {p.name || "Untitled project"}
+              {p.name || "New Project"}
             </Link>
           </h2>
           <p className="mt-0.5 text-[13px] text-zinc-500">
@@ -317,6 +324,58 @@ function CardMenu({ project: p, onDelete }: { project: ProjectSummary; onDelete:
             className={cx(item, "text-rose-300 hover:bg-rose-500/10")}
           >
             <Trash2 className="size-4" /> Delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Initials button with who's signed in and Sign out. */
+function AccountMenu({ owner }: { owner: Owner }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  const signOut = async () => {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    location.assign("/login");
+  };
+
+  return (
+    <div ref={root} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-label="Account"
+        className="flex items-center gap-2.5 rounded-full py-1 pr-1 pl-3 text-[14px] text-zinc-300 transition hover:bg-white/[0.04]"
+      >
+        <span className="hidden max-w-48 truncate sm:inline">{owner.restaurant}</span>
+        <span className="flex size-8 items-center justify-center rounded-full bg-white/10 text-white">
+          <UserRound className="size-[18px]" />
+        </span>
+      </button>
+      {open && (
+        <div className="absolute top-full right-0 z-50 mt-2 w-64 rounded-xl bg-zinc-900 p-1.5 shadow-2xl ring-1 ring-white/10">
+          <div className="px-2.5 py-2">
+            <p className="truncate text-[14px] font-medium text-zinc-100">
+              {owner.firstName} {owner.lastName}
+            </p>
+            <p className="truncate text-[13px] text-zinc-500">{owner.email}</p>
+          </div>
+          <div className="my-1 h-px bg-white/[0.06]" />
+          <button onClick={signOut} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[14px] text-zinc-300 transition hover:bg-white/[0.06] hover:text-white">
+            <LogOut className="size-4" /> Sign out
           </button>
         </div>
       )}
