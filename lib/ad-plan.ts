@@ -1,3 +1,4 @@
+import { isFontFamily } from "@/lib/fonts";
 import type { Dish } from "@/lib/types";
 
 /**
@@ -65,6 +66,8 @@ export interface AdProject {
   restaurant: string;
   cta: string;
   website: string;
+  /** Google Fonts family for the restaurant name; unset = match the website (see lib/brand-font.ts). */
+  font?: string;
   music: boolean;
   /** AI-generated cooking and diner shots around each dish (needs a video API key). */
   lifestyle: boolean;
@@ -323,6 +326,7 @@ export function sanitizeProject(raw: unknown): AdProject {
     restaurant: str(o.restaurant, 60) ?? "",
     cta: str(o.cta, 24) ?? "Order now",
     website: str(o.website, 80) ?? "",
+    ...(isFontFamily(o.font) ? { font: o.font.trim() } : {}),
     music: o.music !== false,
     lifestyle: o.lifestyle !== false,
     scenes: [scene(intro ?? { id: "intro" }, "intro"), ...dishes.map((s) => scene(s, "dish")), scene(outro ?? { id: "outro" }, "outro")],
