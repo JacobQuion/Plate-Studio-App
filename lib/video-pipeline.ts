@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { probeDuration, runFfmpeg } from "@/lib/ffmpeg";
 import { TRANSITION_SECONDS as TRANSITION, VOICE_LEAD, planTimeline, resolveScenes, type AdProject, type CameraStyle, type LibraryDish, type ResolvedScene } from "@/lib/ad-plan";
 import { renderMusicBed } from "@/lib/music";
+import { loadBrandFont } from "@/lib/brand-font";
 import { OUTPUT_HEIGHT, OUTPUT_WIDTH, RENDER_QUALITY, VIDEO_WIDTH, renderIntroOverlay, renderOutroOverlay, type FrameBoxes } from "@/lib/overlays";
 import { buildMotionPrompt, configuredVideoProvider, expectedClipSeconds, generateMotionClip } from "@/lib/providers/video";
 import { RenderEstimate } from "@/lib/render-estimate";
@@ -48,6 +49,8 @@ export interface AdResult {
   /** Clickable text regions per scene id. */
   layout: Record<string, FrameBoxes>;
   providers: { video: VideoProvider; voice: VoiceProvider };
+  /** Font the restaurant name was set in. */
+  font: string;
 }
 
 export type ProgressCallback = (event: ProgressEvent) => void;
@@ -163,6 +166,7 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
   // 1. Assets: photos cropped to 16:9, text layers rendered
   // -------------------------------------------------------------------------
   emit("assets", "active", `Preparing ${plural(dishes.length, "photo")}`);
+  const brandFont = await loadBrandFont(project);
   const stills = new Map(dishes.map((d) => [d.id, path.join(dir, `still_${d.id}.jpg`)]));
   const [, overlays] = await Promise.all([
     Promise.all(
@@ -177,11 +181,11 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
     Promise.all(
       scenes.map(async (s): Promise<{ files: string[]; boxes: FrameBoxes }> => {
         if (s.kind === "intro") {
-          const o = await renderIntroOverlay(dir, s.id, s.headline, s.subline);
+          const o = await renderIntroOverlay(dir, s.id, s.headline, s.subline, brandFont);
           return { files: [o.file], boxes: o.boxes };
         }
         if (s.kind === "outro") {
-          const o = await renderOutroOverlay(dir, s.id, s.headline, s.cta, s.subline);
+          const o = await renderOutroOverlay(dir, s.id, s.headline, s.cta, s.subline, brandFont);
           return { files: [o.file], boxes: o.boxes };
         }
         // Dish scenes are footage only; the voiceover names the dish.
@@ -189,7 +193,7 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
       }),
     ),
   ]);
-  emit("assets", "done", `${plural(dishes.length, "photo")} cropped to 16:9, titles rendered`);
+  emit("assets", "done", `${plural(dishes.length, "photo")} cropped to 16:9, titles set in ${brandFont.family}`);
 
   // -------------------------------------------------------------------------
   // 2 + 3. Motion clips and voiceover lines in parallel
@@ -329,6 +333,7 @@ export async function generateAd(project: AdProject, library: LibraryDish[], onP
     timeline: scenes.map((s, i) => ({ sceneId: s.id, start: timeline.starts[i], duration: durations[i] })),
     layout: Object.fromEntries(scenes.map((s, i) => [s.id, overlays[i].boxes])),
     providers: { video: motion.provider, voice: voice.provider },
+    font: brandFont.family,
   };
 }
 
